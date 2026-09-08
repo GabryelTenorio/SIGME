@@ -1,0 +1,1 @@
+<x-layouts.app title="Nova categoria" active="categories"><header class="page-header"><div><h1>Nova categoria</h1><p>Crie uma classificação padronizada para ocorrências.</p></div></header><form method="POST" action="{{ route('categories.store') }}" class="form-card">@csrf @include('categories._form')</form></x-layouts.app>
