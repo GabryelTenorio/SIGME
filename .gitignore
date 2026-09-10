@@ -6,6 +6,7 @@
 !.env.local.example
 !.env.demo.example
 !.env.testing.example
+!.env.windows.example
 .env.backup
 .env.production
 .phpactor.json

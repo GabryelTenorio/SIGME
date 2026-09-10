@@ -2,7 +2,51 @@
 
 Sistema de Gestão de Manutenção Escolar para registrar ocorrências, realizar triagem, emitir e executar Ordens de Serviço, controlar aprovações, custos, materiais, evidências privadas, notificações e reaberturas.
 
-O projeto é uma aplicação Laravel executada localmente por Docker Compose/Laravel Sail. Aplicação, fila, agendador, MySQL e Mailpit funcionam em serviços separados.
+O projeto é uma aplicação Laravel executada localmente com Docker. Aplicação, fila, agendador, MySQL e Mailpit funcionam em serviços separados. Existem duas opções: instalação pelo Windows com Docker Desktop e ambiente de desenvolvimento com Ubuntu/WSL e Laravel Sail.
+
+## Windows com Docker Desktop — instalação sem terminal Ubuntu
+
+Nesta opção você pode baixar o projeto em `C:\SIGME` e usar os atalhos do Windows. Não precisa instalar PHP, Composer, Node, MySQL ou uma distribuição Ubuntu manualmente. O Docker Desktop administra o ambiente Linux interno; mantenha **Linux containers** selecionado. Isso não é execução com Windows containers nem elimina o backend de virtualização do Docker.
+
+Requisitos: Windows 11 x64 atualizado, virtualização habilitada, Docker Desktop com Docker Compose v2 (`--wait` disponível), PowerShell 5.1 ou superior, internet na instalação, 8 GB de RAM e pelo menos 20 GB livres. Para uso mais confortável, prefira 16 GB e SSD com 30 GB livres. Consulte os requisitos e a instalação atuais do [Docker Desktop para Windows](https://docs.docker.com/desktop/setup/install/windows-install/).
+
+1. Instale e abra o Docker Desktop. Conclua a configuração solicitada por ele e aguarde o mecanismo ficar pronto.
+2. Baixe e extraia o ZIP deste repositório privado em `C:\SIGME`, ou clone-o com Git para Windows. A pasta deve conter `compose.windows.yaml` e os atalhos `.cmd`.
+3. Dê dois cliques em **Instalar SIGME Docker.cmd**. A primeira execução baixa dependências, constrói a imagem, cria o banco vazio e aplica as migrations. O console mostra o progresso e os erros, se houver.
+4. Execute **Criar administrador SIGME Docker.cmd**. Informe seu nome e e-mail; guarde a senha gerada, exibida uma única vez. Usar um e-mail já cadastrado atualiza essa conta e sua senha.
+5. Entre em [http://localhost:8080](http://localhost:8080). Os e-mails de teste aparecem em [http://localhost:8025](http://localhost:8025).
+
+No uso diário, abra o Docker Desktop e use **Iniciar SIGME Docker.cmd**, **Status SIGME Docker.cmd** ou **Parar SIGME Docker.cmd**. Parar mantém os dados.
+
+Também é possível usar PowerShell, dentro da pasta do projeto:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\docker.ps1 -Action Install
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\docker.ps1 -Action Start
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\docker.ps1 -Action Status
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\docker.ps1 -Action Admin
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\docker.ps1 -Action Logs
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\docker.ps1 -Action Stop
+```
+
+Para escolher outras portas na primeira instalação, acrescente `-Port 8082 -MailpitPort 8027`. Depois que `.env.windows` existir, altere `APP_PORT` e `MAILPIT_PORT` nele e reinicie. As opções de porta da linha de comando só preenchem o arquivo na primeira instalação.
+
+### Dados e configuração nesta opção
+
+- `.env.windows`: chaves e senhas geradas localmente; ignorado pelo Git e pelo build da imagem. Preserve esse arquivo em cópia segura. Não o substitua pelo exemplo depois de criar o banco.
+- `sigme-windows_mysql`: banco MySQL persistente.
+- `sigme-windows_uploads`: anexos privados persistentes.
+- `sigme-windows_logs`: logs persistentes.
+- A imagem contém somente código e dependências; não inclui o banco, o snapshot antigo, `.env`, uploads, testes ou checkpoints locais.
+- As portas são limitadas a `127.0.0.1`. MySQL não tem porta publicada.
+
+O projeto Docker `sigme-windows` é separado do ambiente antigo `sigme`. Seus dados antigos não são importados automaticamente. Se os dois estiverem ativos, escolha portas diferentes. Não altere `SIGME_WINDOWS_PROJECT` depois de começar a usar a instalação: ele identifica os volumes. Não exclua esses volumes nem execute `down -v` se quiser conservar seus dados. Copiar somente o código para outro PC não transfere banco e anexos; preserve os volumes e `.env.windows` em seu procedimento de backup.
+
+Para atualizar o código desta opção, faça backup dos dados, baixe a nova versão preservando `.env.windows`, pare os serviços e execute novamente **Instalar SIGME Docker.cmd**. O instalador reutiliza chaves e volumes existentes e aplica migrations pendentes. O código é copiado para a imagem: alterações em arquivos só aparecem após reconstruí-la.
+
+Os scripts `scripts/wsl/*` e o procedimento de restauração abaixo pertencem à opção Sail/WSL. Não use o restaurador antigo para restaurar o banco da opção Windows/Docker.
+
+Verificação em 10/09/2026: imagem construída do zero, 32 migrations aplicadas em banco isolado, criação de administrador, login HTTP a partir do Windows, CSS/JS e saúde com HTTP 200, persistência do administrador e de um arquivo privado após parar e iniciar os serviços. O script foi validado sintaticamente no Windows PowerShell 5.1, incluindo a mensagem de erro quando Docker Desktop está ausente. Esses testes usaram o Docker Engine disponível no WSL; a instalação completa em um Windows novo com Docker Desktop ainda precisa ser ensaiada.
 
 ## Estado desta versão
 
@@ -18,9 +62,9 @@ O projeto é uma aplicação Laravel executada localmente por Docker Compose/Lar
 - 137 testes automatizados, com 1.021 asserções, aprovados em 10/09/2026;
 - build de produção e revisão responsiva validados em 10/09/2026.
 
-## Compatibilidade e requisitos mínimos
+## Desenvolvimento com Sail/WSL — compatibilidade e requisitos
 
-Esta versão foi preparada e validada para computadores Windows. "Qualquer PC", neste README, significa qualquer máquina que atenda aos requisitos abaixo. macOS, Linux nativo, Windows Server e processadores ARM não fazem parte do ambiente oficialmente testado desta V1.
+As seções seguintes descrevem o ambiente Sail/WSL original, usado no desenvolvimento. Para instalar pelo Windows sem usar o Ubuntu manualmente, utilize a opção acima. macOS, Linux nativo, Windows Server e processadores ARM não fazem parte da matriz de homologação desta V1.
 
 ### Mínimo obrigatório
 
@@ -44,7 +88,7 @@ Esta versão foi preparada e validada para computadores Windows. "Qualquer PC", 
 
 O verificador incluído no projeto exige Windows 11 e Ubuntu 24.04. Os requisitos básicos de WSL e Docker podem ser consultados na [documentação da Microsoft](https://learn.microsoft.com/windows/wsl/install) e na [documentação do Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/).
 
-O código deve ficar no filesystem Linux, por exemplo `/home/seu-usuario/projetos/sigme`. Não execute o projeto em `/mnt/c` ou `/mnt/e`, pois o desempenho e as permissões do Docker ficam menos previsíveis.
+No modo de desenvolvimento Sail, o código deve ficar no filesystem Linux, por exemplo `/home/seu-usuario/projetos/sigme`. Evite `/mnt/c` ou `/mnt/e` nesse modo. A instalação Windows/Docker acima pode manter sua cópia em `C:\SIGME`, pois executa o código dentro da imagem, sem montar a pasta do Windows nos containers.
 
 ## Instalação em um computador novo
 
