@@ -39,11 +39,12 @@ class SchoolRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $code = $this->input('code');
         $this->merge([
             'organization_id' => $this->user()->is_platform_admin
                 ? $this->input('organization_id')
                 : $this->user()->organization_id,
-            'code' => Str::upper(Str::slug($this->input('code'), '-')),
+            'code' => is_string($code) ? Str::upper(Str::slug($code, '-')) : $code,
             'is_active' => $this->boolean('is_active'),
         ]);
     }

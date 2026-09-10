@@ -19,7 +19,9 @@ class InternalNotificationController extends Controller
             ->latest()
             ->simplePaginate(30);
 
-        return view('notifications.index', compact('notifications'));
+        $hasUnreadNotifications = $request->user()->internalNotifications()->whereNull('read_at')->exists();
+
+        return view('notifications.index', compact('notifications', 'hasUnreadNotifications'));
     }
 
     public function open(Request $request, InternalNotification $notification): RedirectResponse

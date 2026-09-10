@@ -1,7 +1,7 @@
 <x-layouts.app title="Notificações" active="notifications">
     <header class="page-header">
         <div><h1>Notificações</h1><p>Avisos internos relacionados às escolas e atividades que você acompanha.</p></div>
-        @if ($notifications->contains(fn ($notification) => $notification->read_at === null))
+        @if ($hasUnreadNotifications)
             <form method="POST" action="{{ route('notifications.read-all') }}">
                 @csrf
                 @method('PATCH')
@@ -10,7 +10,7 @@
         @endif
     </header>
 
-    <form method="POST" action="{{ route('notifications.preferences.update') }}" class="form-card">
+    <form method="POST" action="{{ route('notifications.preferences.update') }}" class="form-card notification-preferences">
         @csrf
         @method('PATCH')
         <div class="section-title">

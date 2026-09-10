@@ -7,6 +7,7 @@
         ? 'Administrador da plataforma'
         : ($currentUser->roles()->value('name') ?? 'Usuário SIGME');
     $showOrganizations = $currentUser->is_platform_admin;
+    $showOwnOrganization = ! $showOrganizations && $currentUser->organization && $currentUser->can('update', $currentUser->organization);
     $showSchools = $currentUser->is_platform_admin || $currentUser->hasPermission('escolas.gerenciar')
         || $currentUser->accessibleSchools()->contains(fn ($school) => $currentUser->hasPermission('escolas.gerenciar', $school));
     $showUsers = $currentUser->is_platform_admin || $currentUser->hasPermission('usuarios.gerenciar')
@@ -36,6 +37,7 @@
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
     <body class="app-body">
+        <a class="skip-link" href="#main-content">Ir para o conteúdo</a>
         <div class="app-shell">
             <div class="sidebar-overlay" data-sidebar-close></div>
             <aside class="sidebar" id="app-sidebar" aria-label="Navegação principal">
@@ -50,12 +52,15 @@
                         <x-ui.icon name="dashboard" /><span>Dashboard</span>
                     </a>
 
-                    @if ($showOrganizations || $showSchools || $showUsers)
+                    @if ($showOrganizations || $showOwnOrganization || $showSchools || $showUsers)
                         <span class="sidebar-nav__label">Administração</span>
                         @if ($showOrganizations)
                             <a class="sidebar-nav__item @if ($active === 'organizations') is-active @endif" href="{{ route('organizations.index') }}">
                                 <x-ui.icon name="organization" /><span>Organizações</span>
                             </a>
+                        @endif
+                        @if ($showOwnOrganization)
+                            <a class="sidebar-nav__item @if ($active === 'organizations') is-active @endif" href="{{ route('organizations.edit', $currentUser->organization) }}"><x-ui.icon name="organization" /><span>Minha organização</span></a>
                         @endif
                         @if ($showSchools)
                             <a class="sidebar-nav__item @if ($active === 'schools') is-active @endif" href="{{ route('schools.index') }}">
@@ -105,7 +110,7 @@
                     <span class="avatar avatar--small">{{ str($initials)->upper() }}</span>
                 </header>
 
-                <main class="main-area">
+                <main class="main-area" id="main-content" tabindex="-1">
                     <x-ui.alert />
                     {{ $slot }}
                 </main>

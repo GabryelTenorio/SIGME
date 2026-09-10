@@ -26,7 +26,7 @@
 
     <section class="table-card">
         <table class="data-table">
-            <thead><tr><th>Escola</th><th>Código</th><th>Nome</th><th>Tipo</th><th>Localização</th><th>Ativos</th><th>Situação</th><th></th></tr></thead>
+            <thead><tr><th>Escola</th><th>Código</th><th>Nome</th><th>Tipo</th><th>Localização</th><th>Situação</th><th><span class="sr-only">Ações</span></th></tr></thead>
             <tbody>
                 @forelse ($environments as $environment)
                     <tr>
@@ -35,7 +35,6 @@
                         <td><strong>{{ $environment->name }}</strong>@if ($environment->children_count)<small>{{ $environment->children_count }} subambiente(s)</small>@endif</td>
                         <td>{{ $environment->typeLabel() }}</td>
                         <td>{{ $environment->locationLabel() }}</td>
-                        <td>0</td>
                         <td><span class="badge {{ $environment->is_active ? 'badge--success' : 'badge--neutral' }}">{{ $environment->is_active ? 'Ativo' : 'Inativo' }}</span></td>
                         <td><div class="table-actions">
                             @can('update', $environment)<a class="icon-button" href="{{ route('environments.edit', $environment) }}" aria-label="Editar {{ $environment->name }}"><x-ui.icon name="edit" /></a>@endcan
@@ -45,7 +44,7 @@
                         </div></td>
                     </tr>
                 @empty
-                    <tr><td colspan="8" class="empty-state">Nenhum ambiente encontrado neste contexto.</td></tr>
+                    <tr><td colspan="7" class="empty-state">Nenhum ambiente encontrado neste contexto.</td></tr>
                 @endforelse
             </tbody>
         </table>

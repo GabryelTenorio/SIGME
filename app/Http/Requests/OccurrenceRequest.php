@@ -44,7 +44,7 @@ class OccurrenceRequest extends FormRequest
     {
         return [function (Validator $validator): void {
             $school = School::query()->find($this->integer('school_id'));
-            if (! $school || ! $this->user()->canAccessSchool($school) || ! $this->user()->hasPermission('ocorrencias.criar', $school)) {
+            if (! $school || ! $school->is_active || ! $this->user()->canAccessSchool($school) || ! $this->user()->hasPermission('ocorrencias.criar', $school)) {
                 $validator->errors()->add('school_id', 'Você não pode registrar ocorrências nesta escola.');
 
                 return;

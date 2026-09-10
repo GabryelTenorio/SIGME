@@ -38,8 +38,9 @@ class OrganizationRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $slug = $this->input('slug') ?: $this->input('name');
         $this->merge([
-            'slug' => Str::slug($this->input('slug') ?: $this->input('name')),
+            'slug' => is_string($slug) ? Str::slug($slug) : $slug,
             'allows_student_representative' => $this->boolean('allows_student_representative'),
             'is_active' => $this->boolean('is_active'),
         ]);

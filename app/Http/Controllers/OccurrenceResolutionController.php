@@ -18,14 +18,6 @@ class OccurrenceResolutionController extends Controller
     public function close(Request $r, Occurrence $o): RedirectResponse
     {
         $this->authorize('close', $o);
-        if ($o->status !== 'RESOLVIDA') {
-            throw ValidationException::withMessages(['status' => 'Somente ocorrência resolvida pode ser encerrada.']);
-        }
-        if (! $o->canBeResolvedFromServiceOrders()) {
-            throw ValidationException::withMessages([
-                'service_orders' => 'A ocorrência exige ao menos uma Ordem de Serviço concluída e nenhuma OS válida pendente antes do encerramento.',
-            ]);
-        }
         $this->move($r, $o, 'ENCERRADA', 'closed');
 
         return back()->with('success', 'Ocorrência encerrada.');
@@ -34,9 +26,6 @@ class OccurrenceResolutionController extends Controller
     public function reopen(Request $r, Occurrence $o): RedirectResponse
     {
         $this->authorize('reopen', $o);
-        if (! in_array($o->status, ['RESOLVIDA', 'ENCERRADA'], true)) {
-            throw ValidationException::withMessages(['status' => 'Ocorrência não pode ser reaberta neste estado.']);
-        }
         $reason = $r->validate(['reason' => 'required|string|max:3000'])['reason'];
         $this->move($r, $o, 'EM_TRIAGEM', 'reopened', ['reason' => $reason]);
 
@@ -78,6 +67,16 @@ class OccurrenceResolutionController extends Controller
     {
         DB::transaction(function () use ($r, $o, $status, $event, $meta): void {
             $occurrence = Occurrence::query()->lockForUpdate()->findOrFail($o->id);
+            $this->authorize($event === 'closed' ? 'close' : 'reopen', $occurrence);
+            $allowedStatuses = $event === 'closed' ? ['RESOLVIDA'] : ['RESOLVIDA', 'ENCERRADA'];
+            if (! in_array($occurrence->status, $allowedStatuses, true)) {
+                throw ValidationException::withMessages(['status' => 'Esta transição não é permitida no estado atual da ocorrência.']);
+            }
+            if ($event === 'closed' && ! $occurrence->canBeResolvedFromServiceOrders()) {
+                throw ValidationException::withMessages([
+                    'service_orders' => 'A ocorrência exige ao menos uma Ordem de Serviço concluída e nenhuma OS válida pendente antes do encerramento.',
+                ]);
+            }
             $oldStatus = $occurrence->status;
             $occurrence->update(['status' => $status]);
             $history = OccurrenceHistory::query()->create(['occurrence_id' => $occurrence->id, 'actor_id' => $r->user()->id, 'event_type' => $event, 'old_values' => ['status' => $oldStatus], 'new_values' => ['status' => $status], 'metadata' => $meta]);

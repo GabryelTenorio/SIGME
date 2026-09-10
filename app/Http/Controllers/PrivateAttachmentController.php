@@ -22,9 +22,29 @@ class PrivateAttachmentController extends Controller
     {
         $this->authorize('update', $o);
         $file = $r->validate(['evidence' => 'required|file|max:10240|mimes:jpg,jpeg,png,pdf'])['evidence'];
-        $path = $file->store('service-orders/'.$o->id, 'local');
-        $a = $o->attachments()->create(['uploaded_by' => $r->user()->id, 'disk' => 'local', 'path' => $path, 'original_name' => $file->getClientOriginalName(), 'mime_type' => $file->getMimeType() ?: 'application/octet-stream', 'size' => $file->getSize()]);
-        ServiceOrderHistory::query()->create(['service_order_id' => $o->id, 'actor_id' => $r->user()->id, 'event_type' => 'attachment_added', 'metadata' => ['attachment_id' => $a->id, 'name' => $a->original_name]]);
+        $path = null;
+        try {
+            DB::transaction(function () use ($r, $o, $file, &$path): void {
+                Occurrence::query()->lockForUpdate()->findOrFail($o->occurrence_id);
+                $order = ServiceOrder::query()->lockForUpdate()->findOrFail($o->id);
+                $this->authorize('update', $order);
+                if (! in_array($order->status, ['APROVADA', 'EM_EXECUCAO', 'AGUARDANDO_MATERIAL', 'PAUSADA'], true)) {
+                    throw ValidationException::withMessages(['status' => 'A OS não aceita evidências neste estado.']);
+                }
+
+                $path = $file->store('service-orders/'.$order->id, 'local');
+                if ($path === false) {
+                    throw new RuntimeException('Não foi possível armazenar a evidência privada.');
+                }
+                $attachment = $order->attachments()->create(['uploaded_by' => $r->user()->id, 'disk' => 'local', 'path' => $path, 'original_name' => $file->getClientOriginalName(), 'mime_type' => $file->getMimeType() ?: 'application/octet-stream', 'size' => $file->getSize()]);
+                ServiceOrderHistory::query()->create(['service_order_id' => $order->id, 'actor_id' => $r->user()->id, 'event_type' => 'attachment_added', 'metadata' => ['attachment_id' => $attachment->id, 'name' => $attachment->original_name]]);
+            });
+        } catch (Throwable $exception) {
+            if (is_string($path)) {
+                Storage::disk('local')->delete($path);
+            }
+            throw $exception;
+        }
 
         return back()->with('success', 'Evidência privada anexada.');
     }
@@ -86,6 +106,11 @@ class PrivateAttachmentController extends Controller
         abort_unless($resource instanceof ServiceOrder || $resource instanceof Occurrence, 404);
         abort_unless($request->user()->can('view', $resource), 404);
 
-        return Storage::disk($attachment->disk)->download($attachment->path, $attachment->original_name);
+        abort_unless(in_array($attachment->disk, ['local', 'private-local'], true), 404);
+        abort_unless(Storage::disk($attachment->disk)->exists($attachment->path), 404);
+
+        return Storage::disk($attachment->disk)->download($attachment->path, $attachment->original_name, [
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 }

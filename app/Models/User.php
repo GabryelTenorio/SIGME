@@ -56,6 +56,10 @@ class User extends Authenticatable
 
     public function hasPermission(string $permission, ?School $school = null): bool
     {
+        if (! $this->hasActiveAccess()) {
+            return false;
+        }
+
         if ($this->is_platform_admin) {
             return true;
         }
@@ -87,6 +91,10 @@ class User extends Authenticatable
 
     public function canAccessSchool(School $school): bool
     {
+        if (! $this->hasActiveAccess()) {
+            return false;
+        }
+
         if ($this->is_platform_admin) {
             return true;
         }
@@ -112,6 +120,10 @@ class User extends Authenticatable
     /** @return Collection<int, School> */
     public function accessibleSchools(): Collection
     {
+        if (! $this->hasActiveAccess()) {
+            return collect();
+        }
+
         if ($this->is_platform_admin) {
             return School::query()->where('is_active', true)->orderBy('name')->get();
         }
@@ -138,6 +150,20 @@ class User extends Authenticatable
                 ->orWhereIn('id', $assignedSchoolIds))
             ->orderBy('name')
             ->get();
+    }
+
+    public function hasActiveAccess(): bool
+    {
+        return $this->is_active
+            && (! $this->organization_id || (bool) $this->organization?->is_active);
+    }
+
+    /** @return Collection<int, School> */
+    public function schoolsWithPermission(string $permission): Collection
+    {
+        return $this->accessibleSchools()->filter(
+            fn (School $school): bool => $this->hasPermission($permission, $school),
+        )->values();
     }
 
     /**

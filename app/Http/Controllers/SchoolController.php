@@ -8,6 +8,7 @@ use App\Models\School;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
@@ -59,10 +60,11 @@ class SchoolController extends Controller
 
     public function store(SchoolRequest $request): RedirectResponse
     {
-        $organization = Organization::query()->findOrFail($request->integer('organization_id'));
-        $this->ensureOrganizationAcceptsSchool($organization);
-
-        School::query()->create($request->validated());
+        DB::transaction(function () use ($request): void {
+            $organization = Organization::query()->lockForUpdate()->findOrFail($request->integer('organization_id'));
+            $this->ensureOrganizationAcceptsSchool($organization);
+            School::query()->create($request->validated());
+        });
 
         return redirect()->route('schools.index')->with('success', 'Escola criada e vinculada à organização.');
     }

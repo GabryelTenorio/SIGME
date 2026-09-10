@@ -46,14 +46,14 @@ class ServiceOrderRequest extends FormRequest
         foreach (['requires_purchase', 'external_service', 'asset_replacement', 'asset_disposal', 'extraordinary_purchase'] as $field) {
             $this->merge([$field => $this->boolean($field)]);
         }
-        $this->merge(['estimated_cost' => $this->input('estimated_cost', 0), 'member_ids' => (array) $this->input('member_ids', [])]);
+        $this->merge(['estimated_cost' => $this->input('estimated_cost') ?? '0.00', 'member_ids' => (array) $this->input('member_ids', [])]);
     }
 
     public function after(): array
     {
         return [function (Validator $validator): void {
             $occurrence = Occurrence::query()->find($this->integer('occurrence_id'));
-            if (! $occurrence || $occurrence->status !== 'ENCAMINHADA' || ! $this->user()->canAccessSchool($occurrence->school) || ! $this->user()->hasPermission('ordens_servico.criar', $occurrence->school)) {
+            if (! $occurrence || ! $occurrence->school->is_active || $occurrence->status !== 'ENCAMINHADA' || ! $this->user()->canAccessSchool($occurrence->school) || ! $this->user()->hasPermission('ordens_servico.criar', $occurrence->school)) {
                 $validator->errors()->add('occurrence_id', 'A OS deve nascer de uma ocorrência encaminhada e autorizada.');
             }
 

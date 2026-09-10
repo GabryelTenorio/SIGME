@@ -45,6 +45,10 @@ class UserRequest extends FormRequest
     public function after(): array
     {
         return [function (Validator $validator): void {
+            if ($validator->errors()->isNotEmpty()) {
+                return;
+            }
+
             $organizationId = (int) $this->input('organization_id');
             $schoolIds = collect($this->input('school_ids', []))->map(fn ($id) => (int) $id);
             $roles = Role::query()->whereIn('id', $this->input('role_ids', []))->get();
@@ -69,10 +73,16 @@ class UserRequest extends FormRequest
                 $validator->errors()->add('school_ids', 'Selecione ao menos uma escola para os perfis escolares.');
             }
 
+            if (! $this->user()->is_platform_admin && ! $this->user()->hasPermission('usuarios.gerenciar')
+                && $roles->contains('scope', 'organization')) {
+                $validator->errors()->add('role_ids', 'Você não pode atribuir perfis válidos para toda a organização.');
+            }
+
             if (! $this->user()->is_platform_admin) {
                 foreach ($schoolIds as $schoolId) {
                     $school = School::query()->find($schoolId);
-                    if ($school && ! $this->user()->canAccessSchool($school)) {
+                    if ($school && (! $this->user()->canAccessSchool($school)
+                        || ! $this->user()->hasPermission('usuarios.gerenciar', $school))) {
                         $validator->errors()->add('school_ids', 'Uma das escolas selecionadas está fora do seu acesso.');
                         break;
                     }
@@ -84,10 +94,10 @@ class UserRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         $this->merge([
-            'organization_id' => $this->user()->is_platform_admin
+            'organization_id' => $this->route('user')?->organization_id ?: ($this->user()->is_platform_admin
                 ? $this->input('organization_id')
-                : $this->user()->organization_id,
-            'email' => Str::lower($this->input('email')),
+                : $this->user()->organization_id),
+            'email' => is_string($this->input('email')) ? Str::lower($this->input('email')) : $this->input('email'),
             'is_active' => $this->boolean('is_active'),
             'school_ids' => array_values(array_filter((array) $this->input('school_ids', []))),
             'role_ids' => array_values(array_filter((array) $this->input('role_ids', []))),

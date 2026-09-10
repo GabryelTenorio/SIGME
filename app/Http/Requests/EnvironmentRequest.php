@@ -50,8 +50,11 @@ class EnvironmentRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         $environment = $this->route('environment');
-        $code = Str::of((string) $this->input('code'))->ascii()->upper()
-            ->replaceMatches('/[^A-Z0-9]+/', '-')->trim('-')->toString();
+        $code = $this->input('code');
+        if (is_string($code)) {
+            $code = Str::of($code)->ascii()->upper()
+                ->replaceMatches('/[^A-Z0-9]+/', '-')->trim('-')->toString();
+        }
 
         $this->merge([
             'school_id' => $environment?->school_id ?: $this->input('school_id'),
@@ -64,6 +67,9 @@ class EnvironmentRequest extends FormRequest
     public function after(): array
     {
         return [function (Validator $validator): void {
+            if ($validator->errors()->isNotEmpty()) {
+                return;
+            }
             $environment = $this->route('environment');
             $school = School::query()->find($this->integer('school_id'));
             if (! $school) {

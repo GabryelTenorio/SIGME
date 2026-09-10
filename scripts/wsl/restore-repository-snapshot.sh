@@ -20,6 +20,7 @@ DATABASE_NAME='sigme'
 
 cd "${SNAPSHOT_DIR}"
 sha256sum --check SHA256SUMS
+gzip --test "${SNAPSHOT_FILE}"
 
 echo
 echo "Esta operação substituirá todos os dados do banco ${DATABASE_NAME}."
@@ -35,8 +36,8 @@ docker compose stop laravel.test queue scheduler
 restore_failed=1
 restore_services() {
     if [[ "${restore_failed}" -ne 0 ]]; then
-        echo 'A restauração falhou. Reiniciando os serviços para permitir diagnóstico.' >&2
-        docker compose start laravel.test queue scheduler >/dev/null 2>&1 || true
+        echo 'A restauração falhou. Aplicação, fila e agendador permanecerão parados para não operar sobre dados incompletos.' >&2
+        echo 'Revise o erro e restaure um backup verificado antes de reiniciar os serviços manualmente.' >&2
     fi
 }
 trap restore_services EXIT

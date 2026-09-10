@@ -91,11 +91,29 @@ class ServiceOrder extends Model
 
     public function materialTotal(): string
     {
+        if ($this->relationLoaded('materials')) {
+            $total = BigDecimal::zero();
+            foreach ($this->materials as $material) {
+                $total = $total->plus($material->total_cost);
+            }
+
+            return (string) $total->toScale(2);
+        }
+
         return (string) BigDecimal::of((string) $this->materials()->sum('total_cost'))->toScale(2);
     }
 
     public function additionalCostTotal(): string
     {
+        if ($this->relationLoaded('costs')) {
+            $total = BigDecimal::zero();
+            foreach ($this->costs as $cost) {
+                $total = $total->plus($cost->amount);
+            }
+
+            return (string) $total->toScale(2);
+        }
+
         return (string) BigDecimal::of((string) $this->costs()->sum('amount'))->toScale(2);
     }
 

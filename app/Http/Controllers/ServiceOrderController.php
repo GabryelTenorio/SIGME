@@ -17,6 +17,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class ServiceOrderController extends Controller
@@ -29,6 +30,7 @@ class ServiceOrderController extends Controller
     public function index(Request $request): View
     {
         $this->authorize('viewAny', ServiceOrder::class);
+        $request->validate(['date_from' => ['nullable', 'date_format:Y-m-d'], 'date_to' => ['nullable', 'date_format:Y-m-d']]);
         $user = $request->user();
         $schools = $user->accessibleSchools()->filter(fn ($school) => $user->hasPermission('ordens_servico.visualizar', $school));
         $managedSchoolIds = $schools->filter(fn ($school) => $user->hasPermission('ordens_servico.criar', $school) || $user->hasPermission('ordens_servico.aprovar', $school) || $user->hasPermission('ordens_servico.atribuir', $school))->pluck('id');
@@ -44,14 +46,16 @@ class ServiceOrderController extends Controller
             ->when($request->boolean('overdue'), fn (Builder $q) => $q->whereDate('due_date', '<', today())->whereNotIn('status', ['CONCLUIDA', 'REJEITADA', 'CANCELADA']))
             ->latest()->get();
 
-        return view('service-orders.index', ['orders' => $orders, 'schools' => $schools, 'users' => User::query()->whereIn('organization_id', $schools->pluck('organization_id'))->where('is_active', true)->orderBy('name')->get(), 'stats' => ['open' => $orders->whereNotIn('status', ['CONCLUIDA', 'REJEITADA', 'CANCELADA'])->count(), 'running' => $orders->where('status', 'EM_EXECUCAO')->count(), 'material' => $orders->where('status', 'AGUARDANDO_MATERIAL')->count(), 'late' => $orders->filter(fn ($o) => $o->due_date?->isPast() && ! in_array($o->status, ['CONCLUIDA', 'REJEITADA', 'CANCELADA'], true))->count()]]);
+        $users = $orders->pluck('assignedUser')->filter()->unique('id')->sortBy('name')->values();
+
+        return view('service-orders.index', ['orders' => $orders, 'schools' => $schools, 'users' => $users, 'stats' => ['open' => $orders->whereNotIn('status', ['CONCLUIDA', 'REJEITADA', 'CANCELADA'])->count(), 'running' => $orders->where('status', 'EM_EXECUCAO')->count(), 'material' => $orders->where('status', 'AGUARDANDO_MATERIAL')->count(), 'late' => $orders->filter(fn ($o) => $o->due_date?->lt(today()) && ! in_array($o->status, ['CONCLUIDA', 'REJEITADA', 'CANCELADA'], true))->count()]]);
     }
 
     public function create(Request $request): View
     {
         $this->authorize('create', ServiceOrder::class);
         $occurrence = Occurrence::query()->findOrFail($request->integer('occurrence_id'));
-        abort_unless($occurrence->status === 'ENCAMINHADA' && $request->user()->canAccessSchool($occurrence->school), 403);
+        abort_unless($occurrence->status === 'ENCAMINHADA' && $request->user()->canAccessSchool($occurrence->school) && $request->user()->hasPermission('ordens_servico.criar', $occurrence->school), 403);
 
         $users = User::query()
             ->where('organization_id', $occurrence->organization_id)
@@ -69,6 +73,10 @@ class ServiceOrderController extends Controller
         $order = DB::transaction(function () use ($request) {
             $occurrence = Occurrence::query()->lockForUpdate()->findOrFail($request->integer('occurrence_id'));
             $school = $occurrence->school;
+            abort_unless($request->user()->hasPermission('ordens_servico.criar', $school), 403);
+            if ($occurrence->status !== 'ENCAMINHADA' || ! $school->is_active) {
+                throw ValidationException::withMessages(['occurrence_id' => 'A ocorrência precisa estar encaminhada em uma escola ativa.']);
+            }
             $year = now()->year;
             DB::table('service_order_sequences')->insertOrIgnore(['school_id' => $school->id, 'year' => $year, 'next_number' => 1, 'created_at' => now(), 'updated_at' => now()]);
             $counter = ServiceOrderSequence::query()->where('school_id', $school->id)->where('year', $year)->lockForUpdate()->sole();
@@ -134,6 +142,7 @@ class ServiceOrderController extends Controller
     public function updateTeam(ServiceOrderTeamRequest $request, ServiceOrder $o): RedirectResponse
     {
         DB::transaction(function () use ($request, $o): void {
+            Occurrence::query()->lockForUpdate()->findOrFail($o->occurrence_id);
             $order = ServiceOrder::query()->lockForUpdate()->findOrFail($o->id);
             $this->authorize('assign', $order);
 

@@ -7,8 +7,10 @@
         type="{{ $type }}"
         value="{{ old($name, $value) }}"
         @required($required)
+        aria-invalid="{{ $errors->has($name) ? 'true' : 'false' }}"
+        @if ($errors->has($name)) aria-describedby="{{ str($name)->slug() }}-error" @endif
         {{ $attributes }}
     >
     @if ($hint)<small>{{ $hint }}</small>@endif
-    @error($name)<em>{{ $message }}</em>@enderror
+    @error($name)<em id="{{ str($name)->slug() }}-error">{{ $message }}</em>@enderror
 </label>

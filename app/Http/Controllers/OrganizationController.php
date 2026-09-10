@@ -6,6 +6,7 @@ use App\Http\Requests\OrganizationRequest;
 use App\Models\Organization;
 use App\Support\AccessCatalog;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
@@ -32,8 +33,10 @@ class OrganizationController extends Controller
 
     public function store(OrganizationRequest $request, AccessCatalog $catalog): RedirectResponse
     {
-        $organization = Organization::query()->create($request->validated());
-        $catalog->provision($organization);
+        DB::transaction(function () use ($request, $catalog): void {
+            $organization = Organization::query()->create($request->validated());
+            $catalog->provision($organization);
+        });
 
         return redirect()->route('organizations.index')->with('success', 'Organização criada com os perfis padrão do SIGME.');
     }
@@ -47,14 +50,17 @@ class OrganizationController extends Controller
 
     public function update(OrganizationRequest $request, Organization $organization): RedirectResponse
     {
-        if ($request->string('mode')->toString() === 'single_school' && $organization->schools()->count() > 1) {
-            throw ValidationException::withMessages([
-                'mode' => 'Uma organização com várias escolas não pode ser alterada para escola única.',
-            ]);
-        }
+        DB::transaction(function () use ($request, $organization): void {
+            $current = Organization::query()->lockForUpdate()->findOrFail($organization->id);
+            $this->authorize('update', $current);
+            if ($request->string('mode')->toString() === 'single_school' && $current->schools()->count() > 1) {
+                throw ValidationException::withMessages([
+                    'mode' => 'Uma organização com várias escolas não pode ser alterada para escola única.',
+                ]);
+            }
+            $current->update($request->validated());
+        });
 
-        $organization->update($request->validated());
-
-        return redirect()->route('organizations.index')->with('success', 'Organização atualizada.');
+        return redirect()->route($request->user()->is_platform_admin ? 'organizations.index' : 'organizations.edit', $request->user()->is_platform_admin ? [] : [$organization])->with('success', 'Organização atualizada.');
     }
 }

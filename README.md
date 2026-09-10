@@ -15,22 +15,59 @@ O projeto é uma aplicação Laravel executada localmente por Docker Compose/Lar
 - fluxo de ocorrência, triagem, OS interna ou externa, aprovação comum ou emergencial, execução e reabertura;
 - anexos privados em imagem ou PDF;
 - notificações internas e preferência individual de envio por e-mail;
-- 114 testes automatizados, com 782 asserções, aprovados em 08/09/2026;
-- build de produção validado em 08/09/2026.
+- 137 testes automatizados, com 1.021 asserções, aprovados em 10/09/2026;
+- build de produção e revisão responsiva validados em 10/09/2026.
 
-## Pré-requisitos no Windows
+## Compatibilidade e requisitos mínimos
 
-1. Windows 11 com virtualização habilitada.
-2. WSL 2 atualizado.
-3. Ubuntu 24.04 LTS instalado no WSL.
-4. Docker Desktop aberto, usando o backend WSL 2 e com integração para o Ubuntu habilitada.
-5. Git instalado dentro do Ubuntu.
-6. Pelo menos 20 GB livres.
-7. Portas locais 8080, 8025, 1025 e 5173 disponíveis.
+Esta versão foi preparada e validada para computadores Windows. "Qualquer PC", neste README, significa qualquer máquina que atenda aos requisitos abaixo. macOS, Linux nativo, Windows Server e processadores ARM não fazem parte do ambiente oficialmente testado desta V1.
+
+### Mínimo obrigatório
+
+- Windows 11 de 64 bits, atualizado;
+- processador x86-64 com 4 núcleos, SLAT e virtualização habilitada no BIOS/UEFI;
+- 8 GB de memória RAM;
+- 20 GB livres na unidade do sistema para código, imagens e volumes;
+- WSL 2 versão 2.1.5 ou superior;
+- Ubuntu 24.04 LTS no WSL;
+- Docker Desktop com backend WSL 2 e integração com o Ubuntu habilitada;
+- Git instalado dentro do Ubuntu;
+- acesso à internet na primeira instalação;
+- portas locais 8080, 8025, 1025 e 5173 disponíveis.
+
+### Recomendado
+
+- processador com 6 núcleos ou mais;
+- 16 GB de RAM ou mais;
+- 30 GB livres em SSD;
+- Docker Desktop atualizado e pelo menos 6 GB de memória disponíveis para WSL/Docker.
+
+O verificador incluído no projeto exige Windows 11 e Ubuntu 24.04. Os requisitos básicos de WSL e Docker podem ser consultados na [documentação da Microsoft](https://learn.microsoft.com/windows/wsl/install) e na [documentação do Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/).
 
 O código deve ficar no filesystem Linux, por exemplo `/home/seu-usuario/projetos/sigme`. Não execute o projeto em `/mnt/c` ou `/mnt/e`, pois o desempenho e as permissões do Docker ficam menos previsíveis.
 
-## Instalação rápida
+## Instalação em um computador novo
+
+### 1. Preparar o Windows
+
+Abra o PowerShell como administrador e execute:
+
+```powershell
+wsl --install -d Ubuntu-24.04
+```
+
+Reinicie o computador se o Windows solicitar. Abra o Ubuntu uma vez e conclua a criação do usuário Linux. Depois, instale e abra o Docker Desktop, selecione o backend WSL 2 e habilite a integração para `Ubuntu-24.04` em **Settings > Resources > WSL Integration**.
+
+### 2. Instalar o Git no Ubuntu
+
+No terminal Ubuntu, execute:
+
+```bash
+sudo apt update
+sudo apt install -y git
+```
+
+### 3. Baixar e instalar o SIGME
 
 Abra o terminal do Ubuntu no WSL e execute:
 
@@ -42,6 +79,8 @@ cd sigme
 chmod +x scripts/wsl/*.sh
 ./scripts/wsl/bootstrap.sh
 ```
+
+Como o repositório é privado, o GitHub solicitará autenticação no primeiro clone. Use uma conta autorizada; em clone HTTPS, use um token pessoal no lugar da senha da conta. Não salve o token no projeto nem no `.env`.
 
 O `bootstrap.sh`:
 
@@ -60,6 +99,19 @@ Ao terminar, acesse:
 - SIGME: http://localhost:8080
 - Mailpit, para visualizar e-mails locais: http://localhost:8025
 
+### 4. Criar o primeiro administrador
+
+Em uma instalação vazia, crie uma conta administrativa:
+
+```bash
+docker compose exec laravel.test php artisan sigme:create-admin \
+  --name="Seu nome" \
+  --email="seu-email@exemplo.com" \
+  --generate
+```
+
+O comando mostra uma senha segura uma única vez. Guarde-a em um gerenciador de senhas e entre em http://localhost:8080.
+
 ## Restaurar o banco incluído neste repositório
 
 O arquivo `database/snapshots/sigme.sql.gz` contém uma fotografia restaurável do banco local de 08/09/2026, após as migrations da V1 e antes da massa temporária usada na auditoria final. O snapshot possui 10 usuários, 4 escolas e 1 ocorrência original. Não havia arquivos de upload nesse estado.
@@ -74,20 +126,6 @@ cd ~/projetos/sigme
 O script mostra o banco de destino, pede a confirmação exata `RESTAURAR`, verifica o SHA-256, pausa somente os serviços que usam o banco, recria o banco `sigme`, importa o snapshot e inicia novamente os serviços.
 
 Essa operação substitui os dados existentes. Não a execute sobre um banco que contenha informações que você queira preservar.
-
-## Criar seu administrador
-
-Para gerar uma conta administrativa própria e uma senha segura exibida uma única vez:
-
-```bash
-cd ~/projetos/sigme
-docker compose exec laravel.test php artisan sigme:create-admin \
-  --name="Seu nome" \
-  --email="seu-email@exemplo.com" \
-  --generate
-```
-
-Guarde a senha em um gerenciador de senhas. O `.env` real e credenciais locais não são enviados ao GitHub.
 
 ## Uso diário
 
@@ -112,6 +150,23 @@ Ou use o Ubuntu:
 ```
 
 Nunca use `docker compose down -v` no uso normal: a opção `-v` remove o volume do MySQL.
+
+## Atualizar uma instalação existente
+
+Antes de atualizar, preserve seus dados e confirme que não há alterações locais que você queira manter. No Ubuntu:
+
+```bash
+cd ~/projetos/sigme
+git status
+git pull --ff-only
+docker compose run --rm laravel.test composer install --no-interaction --prefer-dist --optimize-autoloader
+docker compose run --rm laravel.test npm ci
+docker compose run --rm laravel.test npm run build
+docker compose run --rm laravel.test php artisan migrate --force --no-interaction
+./scripts/wsl/start.sh
+```
+
+O comando de migration atualiza a estrutura do banco sem restaurar o snapshot. Nunca use o script de restauração para uma atualização comum.
 
 ## Testes e build
 
@@ -163,3 +218,11 @@ O snapshot versionado contém dados locais de demonstração e hashes de senha. 
 ## Limite desta publicação
 
 Esta entrega é adequada para desenvolvimento e homologação local. Antes de produção ainda devem ser definidos infraestrutura, domínio, HTTPS, e-mail real, monitoramento, política de backup criptografado, retenção, recuperação de desastre e gestão de segredos.
+
+## Solução rápida de problemas
+
+- **Docker não responde no Ubuntu:** abra o Docker Desktop e confira a integração WSL com `Ubuntu-24.04`.
+- **Porta ocupada:** libere 8080, 8025, 1025 ou 5173, ou altere as portas correspondentes no `.env`.
+- **Página sem o visual atualizado:** execute `docker compose run --rm laravel.test npm run build` e atualize o navegador com `Ctrl+F5`.
+- **Diagnóstico completo:** execute `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/windows/check-prerequisites.ps1` a partir da pasta do projeto no Windows.
+- **Ver logs:** execute `docker compose logs --tail=200 laravel.test queue scheduler mysql`.

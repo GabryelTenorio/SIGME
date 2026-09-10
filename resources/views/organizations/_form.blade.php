@@ -22,5 +22,5 @@
 
 <div class="form-actions">
     <x-ui.button variant="primary" type="submit">{{ $editing ? 'Salvar alterações' : 'Criar organização' }}</x-ui.button>
-    <x-ui.button :href="route('organizations.index')">Cancelar</x-ui.button>
+    <x-ui.button :href="route(auth()->user()->is_platform_admin ? 'organizations.index' : 'dashboard')">Cancelar</x-ui.button>
 </div>

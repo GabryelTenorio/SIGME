@@ -23,12 +23,14 @@ class OccurrenceController extends Controller
     public function index(Request $request): View
     {
         $this->authorize('viewAny', Occurrence::class);
+        $request->validate(['date_from' => ['nullable', 'date_format:Y-m-d'], 'date_to' => ['nullable', 'date_format:Y-m-d']]);
         $user = $request->user();
         $accessible = $user->accessibleSchools();
         $broadIds = $accessible->filter(fn (School $school) => $user->hasPermission('ocorrencias.visualizar_escola', $school) || $user->hasPermission('ocorrencias.triar', $school) || $user->hasPermission('ocorrencias.visualizar_rede'))->pluck('id');
         $forwardedIds = $accessible->filter(fn (School $school) => $user->hasPermission('ocorrencias.visualizar_encaminhadas', $school))->pluck('id');
 
         $occurrences = Occurrence::query()->with(['school', 'environment', 'category', 'reporter'])
+            ->whereIn('school_id', $accessible->pluck('id'))
             ->when(! $user->is_platform_admin, fn (Builder $query) => $query->where(function (Builder $scope) use ($user, $broadIds, $forwardedIds): void {
                 $scope->where('reporter_id', $user->id)->orWhereIn('school_id', $broadIds)
                     ->orWhere(fn (Builder $forwarded) => $forwarded->whereIn('school_id', $forwardedIds)->where('status', 'ENCAMINHADA'));

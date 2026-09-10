@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Occurrence;
 use App\Models\OccurrenceHistory;
 use App\Models\ServiceOrder;
 use App\Models\ServiceOrderHistory;
@@ -48,10 +49,8 @@ class ServiceOrderWorkflowController extends Controller
     public function start(Request $r, ServiceOrder $o): RedirectResponse
     {
         $this->authorize('start', $o);
-        $result = $this->move($r, $o, ['APROVADA'], 'EM_EXECUCAO', 'started', [], ['started_at' => now()]);
-        $this->syncAttendance($o);
 
-        return $result;
+        return $this->move($r, $o, ['APROVADA'], 'EM_EXECUCAO', 'started', [], ['started_at' => now()]);
     }
 
     public function waitMaterial(Request $r, ServiceOrder $o): RedirectResponse
@@ -81,7 +80,8 @@ class ServiceOrderWorkflowController extends Controller
         $reason = $r->validate(['reason' => 'required|string|max:3000'])['reason'];
 
         return DB::transaction(function () use ($o, $r, $reason): RedirectResponse {
-            $current = ServiceOrder::query()->lockForUpdate()->findOrFail($o->id);
+            $current = $this->lockOrderAndOccurrence($o);
+            $this->authorize('emergency', $current);
             $this->require($current, ['AGUARDANDO_APROVACAO']);
 
             if ($current->priority_snapshot !== 'URGENT') {
@@ -111,7 +111,6 @@ class ServiceOrderWorkflowController extends Controller
                     'emergency_ratification_due_at' => $ratificationDueAt,
                 ],
             );
-            $this->syncAttendance($current);
 
             return $result;
         });
@@ -122,7 +121,8 @@ class ServiceOrderWorkflowController extends Controller
         $this->authorize('ratify', $o);
 
         return DB::transaction(function () use ($o, $r): RedirectResponse {
-            $current = ServiceOrder::query()->lockForUpdate()->findOrFail($o->id);
+            $current = $this->lockOrderAndOccurrence($o);
+            $this->authorize('ratify', $current);
             $this->requireIndependentEmergencyRatifier($r, $current);
 
             if (! $current->hasPendingEmergencyRatification()) {
@@ -153,7 +153,7 @@ class ServiceOrderWorkflowController extends Controller
         $data = $r->validate(['solution' => 'required|string|max:5000']);
 
         DB::transaction(function () use ($r, $o, $data): void {
-            $order = ServiceOrder::query()->lockForUpdate()->findOrFail($o->id);
+            $order = $this->lockOrderAndOccurrence($o);
             $this->authorize('complete', $order);
             $this->require($order, ['EM_EXECUCAO']);
             if (! $order->diagnosis) {
@@ -167,34 +167,7 @@ class ServiceOrderWorkflowController extends Controller
 
             $order->update($data + ['status' => 'CONCLUIDA', 'completed_at' => now()]);
             $this->history($r, $order, 'completed', ['status' => 'CONCLUIDA']);
-            if ($order->occurrence->canBeResolvedFromServiceOrders()) {
-                $occurrence = $order->occurrence;
-                $oldStatus = $occurrence->status;
-                $occurrence->update(['status' => 'RESOLVIDA']);
-                $history = OccurrenceHistory::query()->create(['occurrence_id' => $occurrence->id, 'actor_id' => $r->user()->id, 'event_type' => 'resolved_by_service_orders', 'old_values' => ['status' => $oldStatus], 'new_values' => ['status' => 'RESOLVIDA']]);
-                $eventKey = "occurrence:{$occurrence->id}:resolved:history:{$history->id}";
-                $notificationData = ['occurrence_id' => $occurrence->id, 'history_id' => $history->id, 'status' => $occurrence->status];
-                $this->notificationService->send(
-                    collect([$occurrence->reporter]),
-                    $occurrence->school,
-                    $eventKey,
-                    'occurrence.resolved',
-                    "Ocorrência {$occurrence->protocol} resolvida",
-                    'Todas as Ordens de Serviço válidas foram concluídas.',
-                    route('occurrences.show', $occurrence),
-                    $notificationData,
-                );
-                $this->notificationService->sendToSchoolPermissions(
-                    $occurrence->school,
-                    'ocorrencias.encerrar',
-                    $eventKey,
-                    'occurrence.resolved',
-                    "Ocorrência {$occurrence->protocol} resolvida",
-                    'A ocorrência está pronta para encerramento.',
-                    route('occurrences.show', $occurrence),
-                    $notificationData,
-                );
-            }
+            $this->resolveOccurrenceIfReady($r, $order->occurrence);
         });
 
         return back()->with('success', 'Ordem de Serviço concluída.');
@@ -203,14 +176,72 @@ class ServiceOrderWorkflowController extends Controller
     private function move(Request $r, ServiceOrder $o, array $from, string $to, string $event, array $meta = [], array $extra = []): RedirectResponse
     {
         return DB::transaction(function () use ($r, $o, $from, $to, $event, $meta, $extra): RedirectResponse {
+            $o = $this->lockOrderAndOccurrence($o);
+            $ability = match ($event) {
+                'approved' => 'approve',
+                'rejected' => 'reject',
+                'cancelled' => 'cancel',
+                'started', 'resumed' => 'start',
+                'paused', 'waiting_material' => 'pause',
+                'emergency_started' => 'emergency',
+            };
+            $this->authorize($ability, $o);
             $this->require($o, $from);
             $old = $o->status;
             $o->update(['status' => $to] + $extra);
             $history = $this->history($r, $o, $event, ['old_status' => $old, 'status' => $to] + $meta);
             $this->notifyTransition($o, $history, $event, $meta);
+            if (in_array($event, ['started', 'emergency_started'], true)) {
+                $this->syncAttendance($o);
+            }
+            if (in_array($to, ['CANCELADA', 'REJEITADA'], true)) {
+                $this->resolveOccurrenceIfReady($r, $o->occurrence);
+            }
 
             return back()->with('success', 'Status atualizado para '.ServiceOrder::STATUS_LABELS[$to].'.');
         });
+    }
+
+    private function lockOrderAndOccurrence(ServiceOrder $order): ServiceOrder
+    {
+        $occurrence = Occurrence::query()->lockForUpdate()->findOrFail($order->occurrence_id);
+        $current = ServiceOrder::query()->lockForUpdate()->findOrFail($order->id);
+
+        return $current->setRelation('occurrence', $occurrence);
+    }
+
+    private function resolveOccurrenceIfReady(Request $request, Occurrence $occurrence): void
+    {
+        if (! in_array($occurrence->status, ['ENCAMINHADA', 'EM_ATENDIMENTO'], true)
+            || ! $occurrence->canBeResolvedFromServiceOrders()) {
+            return;
+        }
+
+        $oldStatus = $occurrence->status;
+        $occurrence->update(['status' => 'RESOLVIDA']);
+        $history = OccurrenceHistory::query()->create(['occurrence_id' => $occurrence->id, 'actor_id' => $request->user()->id, 'event_type' => 'resolved_by_service_orders', 'old_values' => ['status' => $oldStatus], 'new_values' => ['status' => 'RESOLVIDA']]);
+        $eventKey = "occurrence:{$occurrence->id}:resolved:history:{$history->id}";
+        $notificationData = ['occurrence_id' => $occurrence->id, 'history_id' => $history->id, 'status' => $occurrence->status];
+        $this->notificationService->send(
+            collect([$occurrence->reporter]),
+            $occurrence->school,
+            $eventKey,
+            'occurrence.resolved',
+            "Ocorrência {$occurrence->protocol} resolvida",
+            'Todas as Ordens de Serviço válidas foram concluídas.',
+            route('occurrences.show', $occurrence),
+            $notificationData,
+        );
+        $this->notificationService->sendToSchoolPermissions(
+            $occurrence->school,
+            'ocorrencias.encerrar',
+            $eventKey,
+            'occurrence.resolved',
+            "Ocorrência {$occurrence->protocol} resolvida",
+            'A ocorrência está pronta para encerramento.',
+            route('occurrences.show', $occurrence),
+            $notificationData,
+        );
     }
 
     private function require(ServiceOrder $o, array $states): void
@@ -279,6 +310,7 @@ class ServiceOrderWorkflowController extends Controller
             'rejected' => 'service-order.rejected',
             'waiting_material' => 'service-order.waiting_material',
             'paused' => 'service-order.paused',
+            'emergency_started' => 'service-order.emergency_started',
             default => null,
         };
         if ($notificationType === null) {
@@ -294,6 +326,7 @@ class ServiceOrderWorkflowController extends Controller
             'rejected' => "{$order->code} rejeitada",
             'waiting_material' => "{$order->code} aguardando material",
             'paused' => "{$order->code} pausada",
+            'emergency_started' => "Início emergencial autorizado: {$order->code}",
         };
         $body = isset($metadata['reason']) ? (string) $metadata['reason'] : $order->title;
 
@@ -307,6 +340,18 @@ class ServiceOrderWorkflowController extends Controller
             route('service-orders.show', $order),
             ['service_order_id' => $order->id, 'history_id' => $history->id, 'status' => $order->status],
         );
+        if ($event === 'emergency_started') {
+            $this->notificationService->sendToSchoolPermissions(
+                $order->school,
+                'ordens_servico.aprovar',
+                "service-order:{$order->id}:{$event}:history:{$history->id}",
+                $notificationType,
+                $title,
+                $body,
+                route('service-orders.show', $order),
+                ['service_order_id' => $order->id, 'history_id' => $history->id, 'status' => $order->status],
+            );
+        }
     }
 
     private function syncAttendance(ServiceOrder $o): void

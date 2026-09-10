@@ -4,7 +4,7 @@
 
     <div class="service-order-layout">
         <div class="service-order-main">
-            <section class="card"><div class="section-title"><div><h2>Origem e serviço</h2><p>Contexto herdado da ocorrência</p></div><a class="code-pill" href="{{ route('occurrences.show', $order->occurrence) }}">{{ $order->occurrence->protocol }}</a></div>
+            <section class="card"><div class="section-title"><div><h2>Origem e serviço</h2><p>Contexto herdado da ocorrência</p></div>@can('view', $order->occurrence)<a class="code-pill" href="{{ route('occurrences.show', $order->occurrence) }}">{{ $order->occurrence->protocol }}</a>@else<span class="code-pill">{{ $order->occurrence->protocol }}</span>@endcan</div>
                 <dl class="detail-grid"><div><dt>Escola</dt><dd>{{ $order->school->name }}</dd></div><div><dt>Ambiente</dt><dd>{{ $order->occurrence->environment->name }}</dd></div><div><dt>Solicitante</dt><dd>{{ $order->occurrence->reporter->name }}</dd></div><div><dt>Responsável</dt><dd>{{ $order->assignedUser?->name ?? 'A definir' }}</dd></div><div><dt>Prazo</dt><dd>{{ $order->due_date?->format('d/m/Y') ?? 'Sem prazo' }}</dd></div><div><dt>Planejada para</dt><dd>{{ $order->planned_at?->format('d/m/Y H:i') ?? 'Não definida' }}</dd></div></dl>
                 <div class="description-block"><strong>Descrição solicitada</strong><p>{{ $order->description }}</p></div>
                 @if ($order->notes)<div class="description-block"><strong>Observações</strong><p>{{ $order->notes }}</p></div>@endif

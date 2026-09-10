@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
@@ -37,11 +38,11 @@ class LoginRequest extends FormRequest
     {
         $this->ensureIsNotRateLimited();
 
-        if (! Auth::attempt([
+        if (! Auth::attemptWhen([
             'email' => $this->string('email')->toString(),
             'password' => $this->string('password')->toString(),
             'is_active' => true,
-        ], $this->boolean('remember'))) {
+        ], fn (User $user): bool => $user->hasActiveAccess(), $this->boolean('remember'))) {
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([
@@ -67,7 +68,8 @@ class LoginRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        $this->merge(['email' => Str::lower($this->string('email')->toString())]);
+        $email = $this->input('email');
+        $this->merge(['email' => is_string($email) ? Str::lower($email) : $email]);
     }
 
     private function throttleKey(): string

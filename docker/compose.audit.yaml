@@ -1,0 +1,58 @@
+name: sigme-audit
+
+services:
+  mysql:
+    image: mysql:8.4.11
+    pull_policy: never
+    environment:
+      MYSQL_ROOT_PASSWORD: sigme-audit-only
+      MYSQL_DATABASE: sigme_testing
+    volumes:
+      - ../storage/framework/testing/audit/mysql:/var/lib/mysql
+    healthcheck:
+      test: [CMD-SHELL, 'MYSQL_PWD=sigme-audit-only mysqladmin ping -h127.0.0.1 -uroot --silent']
+      interval: 2s
+      timeout: 5s
+      retries: 40
+
+  app:
+    image: sigme-sail-8.5/app
+    pull_policy: never
+    user: '1000:1000'
+    working_dir: /var/www/html/public
+    entrypoint: [php]
+    command: ['-S', '0.0.0.0:8081', '/var/www/html/vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php']
+    ports:
+      - '127.0.0.1:8081:8081'
+    environment:
+      APP_ENV: local
+      APP_DEBUG: 'false'
+      APP_KEY: base64:MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI=
+      APP_URL: http://127.0.0.1:8081
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_DATABASE: sigme_audit_ui
+      DB_USERNAME: root
+      DB_PASSWORD: sigme-audit-only
+      DB_URL: ''
+      CACHE_STORE: array
+      SESSION_DRIVER: file
+      SESSION_COOKIE: sigme-audit-session
+      SESSION_ENCRYPT: 'true'
+      MAIL_MAILER: array
+      QUEUE_CONNECTION: sync
+      LOG_CHANNEL: stderr
+      APP_SERVICES_CACHE: /var/www/html/storage/framework/testing/audit/cache/services.php
+      APP_PACKAGES_CACHE: /var/www/html/storage/framework/testing/audit/cache/packages.php
+      APP_CONFIG_CACHE: /var/www/html/storage/framework/testing/audit/cache/config.php
+      VIEW_COMPILED_PATH: /var/www/html/storage/framework/testing/audit/views
+    volumes:
+      - ..:/var/www/html
+      - ../.env.example:/var/www/html/.env:ro
+      - ../storage/framework/testing/audit/private:/var/www/html/storage/app/private
+      - ../storage/framework/testing/audit/sessions:/var/www/html/storage/framework/sessions
+      - ../storage/framework/testing/audit/disks:/var/www/html/storage/framework/testing/disks
+      - ../storage/framework/testing/audit/build:/var/www/html/public/build
+    depends_on:
+      mysql:
+        condition: service_healthy

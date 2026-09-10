@@ -21,7 +21,7 @@
     <div class="dashboard-grid">
         <section class="card">
             <div class="section-title">
-                <div><h2>Estrutura do SIGME</h2><p>Base disponível para os próximos fluxos operacionais</p></div>
+                <div><h2>Estrutura do SIGME</h2><p>Os menus exibem os módulos disponíveis para o seu perfil.</p></div>
             </div>
 
             <div class="module-list">
@@ -43,9 +43,9 @@
                 <div class="module-row">
                     <span class="module-row__icon"><x-ui.icon name="occurrence" /></span>
                     <span><strong>Ocorrências</strong><small>Protocolo, triagem e acompanhamento</small></span>
-                    <span class="badge badge--success">Fase 1 disponível</span>
+                    <span class="badge badge--success">Disponível</span>
                 </div>
-                <div class="module-row"><span class="module-row__icon"><x-ui.icon name="service-order" /></span><span><strong>Ordens de Serviço</strong><small>Aprovação, execução técnica, evidências, materiais e custos</small></span><span class="badge badge--success">Fase 1 disponível</span></div>
+                <div class="module-row"><span class="module-row__icon"><x-ui.icon name="service-order" /></span><span><strong>Ordens de Serviço</strong><small>Aprovação, execução técnica, evidências, materiais e custos</small></span><span class="badge badge--success">Disponível</span></div>
             </div>
         </section>
 

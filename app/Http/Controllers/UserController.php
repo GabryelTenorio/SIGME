@@ -26,7 +26,7 @@ class UserController extends Controller
 
         $users = User::query()
             ->where('is_platform_admin', false)
-            ->with(['organization', 'schools', 'roles'])
+            ->with(['organization', 'schools', 'roles', 'roleAssignments'])
             ->when(
                 $actor->is_platform_admin,
                 fn (Builder $query) => $query->when(
@@ -37,7 +37,7 @@ class UserController extends Controller
                     $query->where('organization_id', $actor->organization_id);
                     if (! $actor->hasPermission('usuarios.gerenciar')) {
                         $query->whereHas('schools', fn (Builder $schools) => $schools
-                            ->whereIn('schools.id', $actor->accessibleSchools()->pluck('id')));
+                            ->whereIn('schools.id', $actor->schoolsWithPermission('usuarios.gerenciar')->pluck('id')));
                     }
                 },
             )
@@ -46,7 +46,8 @@ class UserController extends Controller
                 $query->where(fn (Builder $term) => $term->where('name', 'like', $search)->orWhere('email', 'like', $search));
             })
             ->orderBy('name')
-            ->get();
+            ->get()
+            ->filter(fn (User $managedUser): bool => $actor->can('view', $managedUser));
 
         return view('users.index', [
             'users' => $users,
@@ -104,15 +105,20 @@ class UserController extends Controller
     {
         $actor = $request->user();
         $organizations = $actor->is_platform_admin
-            ? Organization::query()->where('is_active', true)->orderBy('name')->get()
+            ? Organization::query()->where(fn (Builder $query) => $query
+                ->where('is_active', true)
+                ->when($managedUser, fn (Builder $query) => $query->orWhere('id', $managedUser->organization_id)))
+                ->orderBy('name')->get()
             : collect([$actor->organization]);
-        $organizationId = $managedUser?->organization_id
-            ?: ($request->integer('organization_id') ?: $actor->organization_id ?: $organizations->first()?->id);
+        $organizationId = $managedUser?->organization_id ?: ($actor->is_platform_admin
+            ? ($request->integer('organization_id') ?: $organizations->first()?->id)
+            : $actor->organization_id);
+        abort_if($organizationId !== null && ! $organizations->pluck('id')->contains($organizationId), 403);
 
         $schools = School::query()
             ->where('organization_id', $organizationId)
             ->when(! $actor->is_platform_admin && ! $actor->hasPermission('usuarios.gerenciar'), fn (Builder $query) => $query
-                ->whereIn('id', $actor->accessibleSchools()->pluck('id')))
+                ->whereIn('id', $actor->schoolsWithPermission('usuarios.gerenciar')->pluck('id')))
             ->orderBy('name')
             ->get();
 
@@ -125,6 +131,8 @@ class UserController extends Controller
                 ->where('organization_id', $organizationId)
                 ->where('is_system', true)
                 ->whereIn('slug', array_keys(AccessCatalog::roles()))
+                ->when(! $actor->is_platform_admin && ! $actor->hasPermission('usuarios.gerenciar'),
+                    fn (Builder $query) => $query->where('scope', 'school'))
                 ->orderBy('name')
                 ->get(),
             'selectedSchoolIds' => $managedUser?->schools()->pluck('schools.id')->all() ?? [],

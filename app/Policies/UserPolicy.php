@@ -9,6 +9,10 @@ class UserPolicy
 {
     public function before(User $user): ?bool
     {
+        if (! $user->hasActiveAccess()) {
+            return false;
+        }
+
         return $user->is_platform_admin ? true : null;
     }
 
@@ -32,10 +36,17 @@ class UserPolicy
             return true;
         }
 
-        return $managedUser->schools->contains(
-            fn (School $school) => $user->canAccessSchool($school)
-                && $user->hasPermission('usuarios.gerenciar', $school),
-        );
+        $manageableIds = $user->schoolsWithPermission('usuarios.gerenciar')->pluck('id');
+        $assignments = $managedUser->roleAssignments;
+
+        if ($assignments->contains(fn ($assignment): bool => $assignment->school_id === null)) {
+            return false;
+        }
+
+        $targetSchoolIds = $managedUser->schools->pluck('id')
+            ->merge($assignments->pluck('school_id'))->unique();
+
+        return $targetSchoolIds->isNotEmpty() && $targetSchoolIds->diff($manageableIds)->isEmpty();
     }
 
     public function create(User $user): bool

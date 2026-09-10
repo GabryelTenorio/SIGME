@@ -8,7 +8,7 @@
                 <dl class="detail-grid"><div><dt>Escola</dt><dd>{{ $occurrence->school->name }}</dd></div><div><dt>Ambiente</dt><dd>{{ $occurrence->environment->code }} · {{ $occurrence->environment->name }}</dd></div><div><dt>Categoria</dt><dd>{{ $occurrence->category->name }}</dd></div><div><dt>Solicitante</dt><dd>{{ $occurrence->reporter->name }}</dd></div><div><dt>Impacto</dt><dd>{{ \App\Models\Occurrence::IMPACTS[$occurrence->impact] }}</dd></div><div><dt>Urgência</dt><dd>{{ \App\Models\Occurrence::URGENCIES[$occurrence->perceived_urgency] }}</dd></div><div><dt>Prioridade sugerida</dt><dd>{{ \App\Models\Occurrence::PRIORITIES[$occurrence->suggested_priority] }}</dd></div><div><dt>Prioridade confirmada</dt><dd>{{ $occurrence->confirmed_priority ? \App\Models\Occurrence::PRIORITIES[$occurrence->confirmed_priority] : 'Aguardando triagem' }}</dd></div><div><dt>Registrada em</dt><dd>{{ $occurrence->created_at->format('d/m/Y H:i') }}</dd></div><div><dt>Responsável pela triagem</dt><dd>{{ $occurrence->triageResponsible?->name ?? 'Não definido' }}</dd></div></dl>
                 <div class="description-block"><strong>Descrição</strong><p>{{ $occurrence->description }}</p></div>
                 @if ($occurrence->triage_note)<div class="description-block"><strong>Observação da triagem</strong><p>{{ $occurrence->triage_note }}</p></div>@endif
-                @if ($occurrence->duplicateOf)<div class="duplicate-reference"><strong>Duplicada de:</strong> <a href="{{ route('occurrences.show', $occurrence->duplicateOf) }}">{{ $occurrence->duplicateOf->protocol }}</a></div>@endif
+                @if ($occurrence->duplicateOf)<div class="duplicate-reference"><strong>Duplicada de:</strong> @can('view', $occurrence->duplicateOf)<a href="{{ route('occurrences.show', $occurrence->duplicateOf) }}">{{ $occurrence->duplicateOf->protocol }}</a>@else{{ $occurrence->duplicateOf->protocol }}@endcan</div>@endif
             </section>
 
             <section class="card"><div class="section-title"><div><h2>Evidências privadas</h2><p>{{ $occurrence->attachments->count() }} de 20 arquivos · disponíveis somente para usuários autorizados</p></div></div>
@@ -27,7 +27,11 @@
 
             @if ($occurrence->serviceOrders->isNotEmpty() || $occurrence->status === 'ENCAMINHADA')
                 <section class="card"><div class="section-title"><div><h2>Ordens de Serviço</h2><p>Atendimentos técnicos vinculados à ocorrência</p></div>@if($occurrence->status === 'ENCAMINHADA')@can('create', \App\Models\ServiceOrder::class)<x-ui.button :href="route('service-orders.create', ['occurrence_id' => $occurrence->id])" variant="primary"><x-ui.icon name="plus" /> Criar OS</x-ui.button>@endcan @endif</div>
-                    <div class="linked-orders">@forelse($occurrence->serviceOrders as $order)<a href="{{ route('service-orders.show', $order) }}"><span><strong>{{ $order->code }}</strong><small>{{ $order->title }} · {{ $order->assignedUser?->name ?? 'Responsável a definir' }}</small></span><span class="badge badge--primary">{{ \App\Models\ServiceOrder::STATUS_LABELS[$order->status] }}</span></a>@empty<p class="muted-copy">Nenhuma Ordem de Serviço criada.</p>@endforelse</div>
+                    <div class="linked-orders">@forelse($occurrence->serviceOrders as $order)
+                        @can('view', $order)<a href="{{ route('service-orders.show', $order) }}">@else<div class="linked-order-summary">@endcan
+                            <span><strong>{{ $order->code }}</strong><small>{{ $order->title }} · {{ $order->assignedUser?->name ?? 'Responsável a definir' }}</small></span><span class="badge badge--primary">{{ \App\Models\ServiceOrder::STATUS_LABELS[$order->status] }}</span>
+                        @can('view', $order)</a>@else</div>@endcan
+                    @empty<p class="muted-copy">Nenhuma Ordem de Serviço criada.</p>@endforelse</div>
                 </section>
             @endif
 

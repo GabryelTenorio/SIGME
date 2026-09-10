@@ -49,13 +49,14 @@ class OccurrenceCategoryRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         $category = $this->route('category');
-        $name = Str::squish((string) $this->input('name'));
+        $name = $this->input('name');
+        $name = is_string($name) ? Str::squish($name) : $name;
 
         $this->merge([
             'organization_id' => $category?->organization_id
                 ?: ($this->user()->is_platform_admin ? $this->input('organization_id') : $this->user()->organization_id),
             'name' => $name,
-            'identifier' => Str::slug($name),
+            'identifier' => is_string($name) ? Str::slug($name) : $name,
             'display_order' => $this->input('display_order', 0),
             'is_active' => $this->boolean('is_active'),
             'school_ids' => array_values(array_filter((array) $this->input('school_ids', []))),
@@ -65,6 +66,9 @@ class OccurrenceCategoryRequest extends FormRequest
     public function after(): array
     {
         return [function (Validator $validator): void {
+            if ($validator->errors()->isNotEmpty()) {
+                return;
+            }
             $category = $this->route('category');
             $organization = Organization::query()->with('schools')->find($this->integer('organization_id'));
             if (! $organization) {
