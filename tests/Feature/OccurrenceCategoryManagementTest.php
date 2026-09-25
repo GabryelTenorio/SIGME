@@ -157,6 +157,45 @@ class OccurrenceCategoryManagementTest extends TestCase
         $this->actingAs($admin)->get(route('categories.edit', $category))->assertOk();
     }
 
+    public function test_single_school_manager_can_create_and_edit_category_definition(): void
+    {
+        $organization = Organization::factory()->create(['mode' => 'single_school']);
+        $school = School::factory()->for($organization)->create();
+        $manager = $this->roleUser($organization, 'gestor', $school);
+
+        $this->actingAs($manager)->get(route('categories.index'))->assertOk()->assertSeeText('Nova categoria');
+        $this->actingAs($manager)->get(route('categories.create'))->assertOk();
+        $this->actingAs($manager)->post(route('categories.store'), $this->payload($organization, [
+            'name' => 'Tecnologia educacional',
+            'school_ids' => [$school->id],
+        ]))->assertRedirect(route('categories.index', ['organization_id' => $organization->id]));
+
+        $category = OccurrenceCategory::query()->sole();
+        $this->assertTrue($category->schools->contains($school));
+        $this->actingAs($manager)->get(route('categories.edit', $category))->assertOk();
+    }
+
+    public function test_network_manager_creates_category_only_for_assigned_school(): void
+    {
+        $organization = Organization::factory()->create(['mode' => 'network']);
+        [$ownSchool, $otherSchool] = School::factory()->count(2)->for($organization)->create();
+        $manager = $this->roleUser($organization, 'gestor', $ownSchool);
+
+        $this->actingAs($manager)->get(route('categories.create'))
+            ->assertOk()->assertSeeText($ownSchool->name)->assertDontSeeText($otherSchool->name);
+        $this->actingAs($manager)->post(route('categories.store'), $this->payload($organization, [
+            'name' => 'Categoria indevida',
+            'school_ids' => [$otherSchool->id],
+        ]))->assertSessionHasErrors('school_ids');
+        $this->assertDatabaseCount('occurrence_categories', 0);
+
+        $this->actingAs($manager)->post(route('categories.store'), $this->payload($organization, [
+            'name' => 'Categoria da escola',
+            'school_ids' => [$ownSchool->id],
+        ]))->assertRedirect();
+        $this->assertEqualsCanonicalizing([$ownSchool->id], OccurrenceCategory::query()->sole()->schools()->pluck('schools.id')->all());
+    }
+
     public function test_fallback_category_cannot_be_deactivated(): void
     {
         $admin = User::factory()->create(['is_platform_admin' => true]);

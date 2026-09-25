@@ -109,5 +109,12 @@ class OrganizationAccessTest extends TestCase
         $this->assertTrue($roles['solicitante']->permissions->contains('slug', 'ocorrencias.criar'));
         $this->assertFalse($roles['tecnico']->permissions->contains('slug', 'ordens_servico.aprovar'));
         $this->assertTrue($roles['gestor']->permissions->contains('slug', 'ordens_servico.aprovar'));
+        $this->assertTrue($roles['gestor']->permissions->contains('slug', 'ordens_servico.registrar_custo'));
+        $this->assertTrue($roles['gestor']->permissions->contains('slug', 'usuarios.gerenciar'));
+        $this->assertFalse($roles['gestor']->permissions->contains('slug', 'usuarios.criar'));
+        $this->assertTrue($roles['administrador-rede']->permissions->contains('slug', 'usuarios.criar'));
+        $this->assertTrue($roles['administrador-escola']->permissions->contains('slug', 'usuarios.criar'));
+        $this->assertFalse($roles['gestor']->permissions->contains('slug', 'ocorrencias.visualizar_rede'));
+        $this->assertFalse($roles['gestor']->permissions->contains('slug', 'configuracoes.gerenciar'));
     }
 }

@@ -6,7 +6,7 @@
 
     @if (auth()->user()->is_platform_admin && $organizations->count() > 1)
         <form method="GET" class="filter-bar">
-            <select name="organization_id" onchange="this.form.submit()">
+            <select name="organization_id" data-auto-submit>
                 <option value="">Todas as organizações</option>
                 @foreach ($organizations as $organization)<option value="{{ $organization->id }}" @selected(request('organization_id') == $organization->id)>{{ $organization->name }}</option>@endforeach
             </select>

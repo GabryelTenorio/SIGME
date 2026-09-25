@@ -7,6 +7,9 @@ use App\Models\User;
 
 class UserPolicy
 {
+    /** @var list<string> */
+    private const PRIVILEGED_ROLE_SLUGS = ['administrador-rede', 'administrador-escola', 'gestor'];
+
     public function before(User $user): ?bool
     {
         if (! $user->hasActiveAccess()) {
@@ -36,6 +39,11 @@ class UserPolicy
             return true;
         }
 
+        if ($this->isSchoolManager($user)
+            && $managedUser->roles()->whereIn('slug', self::PRIVILEGED_ROLE_SLUGS)->exists()) {
+            return false;
+        }
+
         $manageableIds = $user->schoolsWithPermission('usuarios.gerenciar')->pluck('id');
         $assignments = $managedUser->roleAssignments;
 
@@ -51,7 +59,12 @@ class UserPolicy
 
     public function create(User $user): bool
     {
-        return $this->viewAny($user);
+        return (bool) $user->organization_id && (
+            $user->hasPermission('usuarios.criar')
+            || $user->accessibleSchools()->contains(
+                fn (School $school) => $user->hasPermission('usuarios.criar', $school),
+            )
+        );
     }
 
     public function update(User $user, User $managedUser): bool
@@ -62,5 +75,11 @@ class UserPolicy
     public function delete(User $user, User $managedUser): bool
     {
         return false;
+    }
+
+    private function isSchoolManager(User $user): bool
+    {
+        return $user->roles()->where('slug', 'gestor')->exists()
+            && ! $user->roles()->whereIn('slug', ['administrador-rede', 'administrador-escola'])->exists();
     }
 }

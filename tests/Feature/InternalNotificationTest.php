@@ -132,6 +132,8 @@ class InternalNotificationTest extends TestCase
     public function test_enabled_email_contains_only_approved_fields_and_authenticated_link(): void
     {
         Mail::fake();
+        config()->set('mail.from.address', 'notificacoes@sigme.example');
+        config()->set('mail.from.name', 'SIGME');
         $organization = Organization::factory()->create();
         $school = School::factory()->for($organization)->create();
         $environment = Environment::factory()->for($school)->create();
@@ -193,6 +195,7 @@ class InternalNotificationTest extends TestCase
             $html = $mail->render();
 
             return $mail->hasTo($user->email)
+                && $mail->hasFrom('notificacoes@sigme.example', 'SIGME')
                 && $mail->protocol === 'SIG-ESC-2026-000123'
                 && $mail->event === 'occurrence.created'
                 && $mail->status === 'EM_TRIAGEM'

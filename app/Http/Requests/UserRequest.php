@@ -14,6 +14,9 @@ use Illuminate\Validation\Validator;
 
 class UserRequest extends FormRequest
 {
+    /** @var list<string> */
+    private const SCHOOL_MANAGER_ASSIGNABLE_ROLE_SLUGS = ['solicitante', 'tecnico', 'representante-aluno'];
+
     public function authorize(): bool
     {
         $managedUser = $this->route('user');
@@ -32,7 +35,6 @@ class UserRequest extends FormRequest
             'organization_id' => ['required', 'integer', Rule::exists(Organization::class, 'id')],
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($managedUser)],
-            'password' => [$managedUser ? 'nullable' : 'required', 'string', 'min:12'],
             'is_active' => ['required', 'boolean'],
             'school_ids' => ['array'],
             'school_ids.*' => ['integer', 'distinct', Rule::exists(School::class, 'id')],
@@ -73,9 +75,18 @@ class UserRequest extends FormRequest
                 $validator->errors()->add('school_ids', 'Selecione ao menos uma escola para os perfis escolares.');
             }
 
+            if ($roles->contains('slug', 'gestor') && $schoolIds->unique()->count() !== 1) {
+                $validator->errors()->add('school_ids', 'O perfil Direção / Gestor deve estar vinculado a uma única escola.');
+            }
+
             if (! $this->user()->is_platform_admin && ! $this->user()->hasPermission('usuarios.gerenciar')
                 && $roles->contains('scope', 'organization')) {
                 $validator->errors()->add('role_ids', 'Você não pode atribuir perfis válidos para toda a organização.');
+            }
+
+            if ($this->isSchoolManager($this->user())
+                && $roles->contains(fn (Role $role): bool => ! in_array($role->slug, self::SCHOOL_MANAGER_ASSIGNABLE_ROLE_SLUGS, true))) {
+                $validator->errors()->add('role_ids', 'A Direção / Gestor pode atribuir somente perfis operacionais da própria escola.');
             }
 
             if (! $this->user()->is_platform_admin) {
@@ -102,5 +113,11 @@ class UserRequest extends FormRequest
             'school_ids' => array_values(array_filter((array) $this->input('school_ids', []))),
             'role_ids' => array_values(array_filter((array) $this->input('role_ids', []))),
         ]);
+    }
+
+    private function isSchoolManager(User $user): bool
+    {
+        return $user->roles()->where('slug', 'gestor')->exists()
+            && ! $user->roles()->whereIn('slug', ['administrador-rede', 'administrador-escola'])->exists();
     }
 }

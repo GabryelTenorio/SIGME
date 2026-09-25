@@ -42,11 +42,11 @@ class AuditRegressionTest extends TestCase
             ['dashboard', [], true], ['notifications.index', [], true],
             ['organizations.index', [], $profile === 'platform'], ['organizations.create', [], $profile === 'platform'],
             ['organizations.edit', [$s['organization']], in_array($profile, ['platform', 'administrador-rede'], true)],
-            ['schools.index', [], $admin], ['schools.create', [], in_array($profile, ['platform', 'administrador-rede'], true)], ['schools.edit', [$s['school']], $admin],
-            ['users.index', [], $admin], ['users.create', [], $admin], ['users.edit', [$s['users']['solicitante']], $admin],
-            ['environments.index', [], true], ['environments.create', [], $admin], ['environments.edit', [$s['environment']], $admin],
-            ['categories.index', [], $manager], ['categories.create', [], in_array($profile, ['platform', 'administrador-rede'], true)], ['categories.edit', [$s['category']], in_array($profile, ['platform', 'administrador-rede'], true)],
-            ['categories.availability', [$s['category']], $admin], ['occurrences.index', [], true], ['occurrences.create', [], true],
+            ['schools.index', [], $manager], ['schools.create', [], in_array($profile, ['platform', 'administrador-rede'], true)], ['schools.edit', [$s['school']], $manager],
+            ['users.index', [], $manager], ['users.create', [], $admin], ['users.edit', [$s['users']['solicitante']], $manager],
+            ['environments.index', [], true], ['environments.create', [], $manager], ['environments.edit', [$s['environment']], $manager],
+            ['categories.index', [], $manager], ['categories.create', [], $manager], ['categories.edit', [$s['category']], in_array($profile, ['platform', 'administrador-rede'], true)],
+            ['categories.availability', [$s['category']], $manager], ['occurrences.index', [], true], ['occurrences.create', [], true],
             ['service-orders.index', [], $operator], ['service-orders.create', ['occurrence_id' => $s['occurrence']->id], $manager],
             ['service-orders.show', [$s['order']], $operator],
         ];
@@ -226,6 +226,7 @@ class AuditRegressionTest extends TestCase
     public function test_material_and_diagnosis_roll_back_when_history_fails(): void
     {
         $s = $this->auditScenario();
+        $s['order']->update(['status' => 'EM_EXECUCAO']);
         $this->actingAs($s['users']['tecnico']);
         ServiceOrderHistory::creating(function (): void {
             throw new \RuntimeException('Simulated history failure');
@@ -245,6 +246,7 @@ class AuditRegressionTest extends TestCase
     public function test_time_shorter_than_one_minute_is_rejected(): void
     {
         $s = $this->auditScenario();
+        $s['order']->update(['status' => 'EM_EXECUCAO']);
         $this->actingAs($s['users']['tecnico'])->post(route('service-orders.work-logs', $s['order']), ['description' => 'Curto demais', 'started_at' => '2026-09-10 10:00:00', 'ended_at' => '2026-09-10 10:00:30'])->assertSessionHasErrors('ended_at');
         $this->assertDatabaseCount('service_order_work_logs', 0);
     }

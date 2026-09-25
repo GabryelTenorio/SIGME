@@ -7,6 +7,7 @@ use App\Models\OccurrenceHistory;
 use App\Models\PrivateAttachment;
 use App\Models\ServiceOrder;
 use App\Models\ServiceOrderHistory;
+use App\Rules\SafePrivateAttachment;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,7 +22,7 @@ class PrivateAttachmentController extends Controller
     public function store(Request $r, ServiceOrder $o): RedirectResponse
     {
         $this->authorize('update', $o);
-        $file = $r->validate(['evidence' => 'required|file|max:10240|mimes:jpg,jpeg,png,pdf'])['evidence'];
+        $file = $r->validate(['evidence' => ['required', 'file', 'max:10240', 'mimes:jpg,jpeg,png,pdf', new SafePrivateAttachment]])['evidence'];
         $path = null;
         try {
             DB::transaction(function () use ($r, $o, $file, &$path): void {
@@ -54,7 +55,7 @@ class PrivateAttachmentController extends Controller
         $this->authorize('addEvidence', $occurrence);
 
         $file = $request->validate([
-            'evidence' => ['required', 'file', 'max:10240', 'mimes:jpg,jpeg,png,pdf'],
+            'evidence' => ['required', 'file', 'max:10240', 'mimes:jpg,jpeg,png,pdf', new SafePrivateAttachment],
         ])['evidence'];
         $storedPath = null;
 

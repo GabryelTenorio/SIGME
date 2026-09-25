@@ -228,7 +228,7 @@ Decisões aprovadas em 31/08/2026:
 1. **Ordem de Serviço**: toda execução de manutenção nasce de uma OS.
 2. **Reabertura**: evento auditável com retorno a `EM_TRIAGEM`; não haverá estado persistido `REABERTA`.
 3. **Atribuição**: responsável e membros devem estar ativos, pertencer à escola e possuir capacidades de visualizar e executar OS.
-4. **Aprovação**: o criador não pode aprovar a própria OS quando houver aprovação obrigatória.
+4. **Aprovação**: o criador com perfil `gestor` na escola pode aprovar ou rejeitar a própria OS; demais criadores continuam sujeitos à segregação.
 5. **Equipamento**: fica fora da primeira versão.
 6. **Notificações**: notificação interna e e-mail; o canal de e-mail será configurável por usuário.
 7. **Marco inicial**: estabilizar e documentar o existente, corrigir gaps e somente então ativar as OS no banco principal.

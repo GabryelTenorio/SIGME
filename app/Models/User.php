@@ -3,24 +3,33 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Observers\UserObserver;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
-#[Fillable(['organization_id', 'name', 'email', 'password', 'is_platform_admin', 'is_active', 'email_notifications_enabled'])]
-#[Hidden(['password', 'remember_token'])]
+#[Fillable(['organization_id', 'name', 'email', 'password', 'password_set_at', 'is_platform_admin', 'is_active', 'email_notifications_enabled', 'onboarding_completed_steps'])]
+#[Hidden(['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes'])]
+#[ObservedBy([UserObserver::class])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
+
+    /** @var array<string, mixed> */
+    protected $attributes = [
+        'email_notifications_enabled' => false,
+    ];
 
     public function organization(): BelongsTo
     {
@@ -52,6 +61,11 @@ class User extends Authenticatable
     public function internalNotifications(): HasMany
     {
         return $this->hasMany(InternalNotification::class);
+    }
+
+    public function firstAccessToken(): HasOne
+    {
+        return $this->hasOne(FirstAccessToken::class);
     }
 
     public function hasPermission(string $permission, ?School $school = null): bool
@@ -158,6 +172,27 @@ class User extends Authenticatable
             && (! $this->organization_id || (bool) $this->organization?->is_active);
     }
 
+    public function hasEnabledTwoFactorAuthentication(): bool
+    {
+        return filled($this->two_factor_secret) && $this->two_factor_confirmed_at !== null;
+    }
+
+    public function requiresFirstAccess(): bool
+    {
+        return $this->password_set_at === null;
+    }
+
+    public function requiresTwoFactorAuthentication(): bool
+    {
+        if ($this->is_platform_admin) {
+            return true;
+        }
+
+        return $this->roles()
+            ->whereIn('slug', config('security.two_factor.required_roles', []))
+            ->exists();
+    }
+
     /** @return Collection<int, School> */
     public function schoolsWithPermission(string $permission): Collection
     {
@@ -176,9 +211,15 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'password_set_at' => 'datetime',
             'is_platform_admin' => 'boolean',
             'is_active' => 'boolean',
             'email_notifications_enabled' => 'boolean',
+            'onboarding_completed_steps' => 'array',
+            'two_factor_secret' => 'encrypted',
+            'two_factor_recovery_codes' => 'encrypted:array',
+            'two_factor_confirmed_at' => 'datetime',
+            'two_factor_last_used_step' => 'integer',
         ];
     }
 }

@@ -150,14 +150,18 @@ class ServiceOrderWorkflowController extends Controller
     public function complete(Request $r, ServiceOrder $o): RedirectResponse
     {
         $this->authorize('complete', $o);
-        $data = $r->validate(['solution' => 'required|string|max:5000']);
+        $data = $r->validate([
+            'solution' => 'required|string|max:5000',
+        ]);
 
         DB::transaction(function () use ($r, $o, $data): void {
             $order = $this->lockOrderAndOccurrence($o);
             $this->authorize('complete', $order);
             $this->require($order, ['EM_EXECUCAO']);
-            if (! $order->diagnosis) {
-                throw ValidationException::withMessages(['diagnosis' => 'Registre o diagnóstico antes da conclusão.']);
+            if (blank($order->diagnosis)) {
+                throw ValidationException::withMessages([
+                    'diagnosis' => 'Registre o diagnóstico como etapa anterior antes de concluir a OS.',
+                ]);
             }
             if ($order->emergencyRatificationIsOverdue()) {
                 throw ValidationException::withMessages([
@@ -165,7 +169,11 @@ class ServiceOrderWorkflowController extends Controller
                 ]);
             }
 
-            $order->update($data + ['status' => 'CONCLUIDA', 'completed_at' => now()]);
+            $order->update([
+                'solution' => $data['solution'],
+                'status' => 'CONCLUIDA',
+                'completed_at' => now(),
+            ]);
             $this->history($r, $order, 'completed', ['status' => 'CONCLUIDA']);
             $this->resolveOccurrenceIfReady($r, $order->occurrence);
         });
@@ -253,11 +261,25 @@ class ServiceOrderWorkflowController extends Controller
 
     private function requireIndependentDecisionMaker(Request $request, ServiceOrder $serviceOrder): void
     {
-        if ((int) $serviceOrder->created_by === (int) $request->user()->id) {
+        $user = $request->user();
+
+        if ((int) $serviceOrder->created_by === (int) $user->id
+            && ! $this->isManagerForSchool($user, $serviceOrder)) {
             throw ValidationException::withMessages([
-                'approval' => 'O criador da Ordem de Serviço não pode aprovar nem rejeitar a própria solicitação.',
+                'approval' => 'Somente um usuário com perfil Direção / Gestor nesta escola pode decidir a própria Ordem de Serviço.',
             ]);
         }
+    }
+
+    private function isManagerForSchool(User $user, ServiceOrder $serviceOrder): bool
+    {
+        return $user->roles()
+            ->where('roles.organization_id', $serviceOrder->organization_id)
+            ->where('roles.slug', 'gestor')
+            ->where(fn ($query) => $query
+                ->whereNull('role_assignments.school_id')
+                ->orWhere('role_assignments.school_id', $serviceOrder->school_id))
+            ->exists();
     }
 
     private function requireIndependentEmergencyAuthorizer(Request $request, ServiceOrder $serviceOrder): void

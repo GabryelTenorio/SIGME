@@ -101,6 +101,64 @@ class UserManagementTest extends TestCase
         $this->assertDatabaseHas('users', ['id' => $user->id, 'is_active' => false]);
     }
 
+    public function test_school_manager_can_manage_existing_users_but_cannot_create_new_accounts(): void
+    {
+        $organization = Organization::factory()->create(['mode' => 'network']);
+        $roles = app(AccessCatalog::class)->provision($organization);
+        $school = School::factory()->for($organization)->create();
+        $manager = User::factory()->for($organization)->create();
+        $manager->schools()->attach($school);
+        RoleAssignment::query()->create(['user_id' => $manager->id, 'role_id' => $roles['gestor']->id, 'school_id' => $school->id]);
+        $technician = User::factory()->for($organization)->create();
+        $technician->schools()->attach($school);
+        RoleAssignment::query()->create(['user_id' => $technician->id, 'role_id' => $roles['tecnico']->id, 'school_id' => $school->id]);
+
+        $this->actingAs($manager)
+            ->get(route('users.index'))
+            ->assertOk()
+            ->assertSeeText($technician->name)
+            ->assertDontSeeText('Novo usuário');
+
+        $this->actingAs($manager)
+            ->get(route('users.edit', $technician))
+            ->assertOk()
+            ->assertSeeText('Editar usuário');
+
+        $this->actingAs($manager)
+            ->get(route('users.create'))
+            ->assertForbidden();
+
+        $this->actingAs($manager)->post(route('users.store'), [
+            'organization_id' => $organization->id,
+            'name' => 'Técnico da escola',
+            'email' => 'tecnico.escola@example.test',
+            'is_active' => '1',
+            'school_ids' => [$school->id],
+            'role_ids' => [$roles['tecnico']->id],
+        ])->assertForbidden();
+
+        $this->assertDatabaseMissing('users', ['email' => 'tecnico.escola@example.test']);
+    }
+
+    public function test_manager_profile_accepts_exactly_one_school(): void
+    {
+        $admin = User::factory()->create(['is_platform_admin' => true]);
+        $organization = Organization::factory()->create(['mode' => 'network']);
+        $roles = app(AccessCatalog::class)->provision($organization);
+        $schools = School::factory()->count(2)->for($organization)->create();
+
+        $this->actingAs($admin)->post(route('users.store'), [
+            'organization_id' => $organization->id,
+            'name' => 'Gestor de duas escolas',
+            'email' => 'gestor.duas@example.test',
+            'is_active' => '1',
+            'school_ids' => $schools->pluck('id')->all(),
+            'role_ids' => [$roles['gestor']->id],
+        ])->assertSessionHasErrors('school_ids');
+
+        $this->assertDatabaseMissing('users', ['email' => 'gestor.duas@example.test']);
+    }
+
     public function test_reprovisioning_removes_the_redundant_occurrence_capability_without_expanding_access(): void
     {
         $organization = Organization::factory()->create(['mode' => 'network']);

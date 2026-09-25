@@ -49,6 +49,41 @@ class ServiceOrderWorkflowTest extends TestCase
         $this->assertDatabaseCount('internal_notifications', 1);
     }
 
+    public function test_planned_service_uses_only_a_date_and_rejects_time_input(): void
+    {
+        [$organization, $school, $occurrence] = $this->structure();
+        $manager = $this->roleUser($organization, $school, 'gestor');
+        $technician = $this->roleUser($organization, $school, 'tecnico');
+        $plannedDate = now()->addDays(3)->toDateString();
+
+        $this->actingAs($manager)
+            ->get(route('service-orders.create', ['occurrence_id' => $occurrence->id]))
+            ->assertOk()
+            ->assertSee('name="planned_at"', false)
+            ->assertDontSee('type="datetime-local"', false);
+
+        $this->actingAs($manager)
+            ->post(route('service-orders.store'), $this->payload($occurrence, $technician, [
+                'planned_at' => $plannedDate,
+            ]))
+            ->assertRedirect();
+
+        $order = ServiceOrder::query()->sole();
+        $this->assertSame($plannedDate, $order->planned_at?->toDateString());
+        $this->actingAs($manager)
+            ->get(route('service-orders.show', $order))
+            ->assertOk()
+            ->assertSee($order->planned_at->format('d/m/Y'))
+            ->assertDontSee($order->planned_at->format('d/m/Y H:i'));
+
+        $this->actingAs($manager)
+            ->post(route('service-orders.store'), $this->payload($occurrence, $technician, [
+                'planned_at' => $plannedDate.'T14:30',
+            ]))
+            ->assertSessionHasErrors('planned_at');
+        $this->assertDatabaseCount('service_orders', 1);
+    }
+
     public function test_manager_changes_team_with_eligibility_history_notifications_and_no_duplicate_event(): void
     {
         [$organization, $school, $occurrence] = $this->structure();
@@ -151,7 +186,10 @@ class ServiceOrderWorkflowTest extends TestCase
         $this->actingAs($manager)
             ->get(route('service-orders.create', ['occurrence_id' => $occurrence->id]))
             ->assertOk()
-            ->assertViewHas('users', fn ($users): bool => $users->pluck('id')->all() === [$eligibleTechnician->id]);
+            ->assertViewHas('users', fn ($users): bool => $users->pluck('id')->sort()->values()->all() === collect([
+                $manager->id,
+                $eligibleTechnician->id,
+            ])->sort()->values()->all());
 
         $this->actingAs($manager)
             ->post(route('service-orders.store'), $this->payload($occurrence, $requester))
@@ -280,7 +318,7 @@ class ServiceOrderWorkflowTest extends TestCase
         $this->assertSame($technician->id, $order->assigned_user_id);
         $this->assertSame([$technician->id], $order->members()->pluck('users.id')->all());
 
-        $this->post(route('logout'))->assertRedirect(route('home'));
+        $this->post(route('logout'))->assertRedirect(route('login'));
         $this->assertGuest();
         $this->get(route('service-orders.show', $order))->assertRedirect(route('login'));
         $this->post(route('login.store'), [
@@ -413,18 +451,11 @@ class ServiceOrderWorkflowTest extends TestCase
         $this->assertSame('AGUARDANDO_APROVACAO', ServiceOrder::query()->latest('id')->first()->status);
     }
 
-    public function test_creator_cannot_approve_or_reject_own_order_even_with_accumulated_roles_or_platform_access(): void
+    public function test_manager_creator_can_approve_and_reject_own_order_while_other_creator_types_remain_segregated(): void
     {
         [$organization, $school, $occurrence] = $this->structure(['approval_threshold' => '10.00']);
         $creator = $this->roleUser($organization, $school, 'gestor');
-        $approver = $this->roleUser($organization, $school, 'gestor');
         $technician = $this->roleUser($organization, $school, 'tecnico');
-        $roles = app(AccessCatalog::class)->provision($organization);
-        RoleAssignment::query()->create([
-            'user_id' => $creator->id,
-            'role_id' => $roles['administrador-escola']->id,
-            'school_id' => $school->id,
-        ]);
         [, $otherSchool] = $this->structure($organization);
         $otherSchoolApprover = $this->roleUser($organization, $otherSchool, 'gestor');
 
@@ -434,22 +465,17 @@ class ServiceOrderWorkflowTest extends TestCase
         );
         $orderToApprove = ServiceOrder::query()->sole();
 
-        $this->actingAs($creator)
-            ->post(route('service-orders.approve', $orderToApprove))
-            ->assertSessionHasErrors('approval');
-        $this->assertSame('AGUARDANDO_APROVACAO', $orderToApprove->fresh()->status);
-
         $this->actingAs($otherSchoolApprover)
             ->post(route('service-orders.approve', $orderToApprove))
             ->assertForbidden();
 
-        $this->actingAs($approver)
+        $this->actingAs($creator)
             ->post(route('service-orders.approve', $orderToApprove))
             ->assertRedirect();
         $this->assertSame('APROVADA', $orderToApprove->fresh()->status);
         $this->assertDatabaseHas('service_order_histories', [
             'service_order_id' => $orderToApprove->id,
-            'actor_id' => $approver->id,
+            'actor_id' => $creator->id,
             'event_type' => 'approved',
         ]);
 
@@ -467,17 +493,12 @@ class ServiceOrderWorkflowTest extends TestCase
         $orderToReject = ServiceOrder::query()->latest('id')->firstOrFail();
 
         $this->actingAs($creator)
-            ->post(route('service-orders.reject', $orderToReject), ['reason' => 'Tentativa do próprio criador.'])
-            ->assertSessionHasErrors('approval');
-        $this->assertSame('AGUARDANDO_APROVACAO', $orderToReject->fresh()->status);
-
-        $this->actingAs($approver)
-            ->post(route('service-orders.reject', $orderToReject), ['reason' => 'Custo não autorizado.'])
+            ->post(route('service-orders.reject', $orderToReject), ['reason' => 'Custo não autorizado pela direção.'])
             ->assertRedirect();
         $this->assertSame('REJEITADA', $orderToReject->fresh()->status);
         $this->assertDatabaseHas('service_order_histories', [
             'service_order_id' => $orderToReject->id,
-            'actor_id' => $approver->id,
+            'actor_id' => $creator->id,
             'event_type' => 'rejected',
         ]);
         foreach ([$creator, $technician] as $recipient) {
@@ -703,6 +724,42 @@ class ServiceOrderWorkflowTest extends TestCase
         $this->actingAs($outsideTechnician)->get(route('service-orders.show', $order))->assertForbidden();
     }
 
+    public function test_manager_can_execute_maintenance_and_record_school_expenses(): void
+    {
+        [$organization, $school, $occurrence] = $this->structure();
+        $manager = $this->roleUser($organization, $school, 'gestor');
+        $order = $this->order($occurrence, $manager);
+
+        $this->actingAs($manager)->post(route('service-orders.start', $order))->assertRedirect();
+        $this->actingAs($manager)->post(route('service-orders.diagnosis', $order), [
+            'diagnosis' => 'Registro identificado com vazamento no reparo.',
+        ])->assertRedirect();
+        $this->actingAs($manager)->post(route('service-orders.materials', $order), [
+            'description' => 'Reparo hidráulico',
+            'quantity' => '1',
+            'unit' => 'un.',
+            'unit_cost' => '35.90',
+        ])->assertRedirect();
+        $this->actingAs($manager)->post(route('service-orders.costs', $order), [
+            'type' => 'OTHER',
+            'description' => 'Deslocamento para compra',
+            'amount' => '12.50',
+        ])->assertRedirect();
+        $this->actingAs($manager)->post(route('service-orders.work-logs', $order), [
+            'started_at' => now()->subHour()->format('Y-m-d H:i:s'),
+            'ended_at' => now()->format('Y-m-d H:i:s'),
+            'description' => 'Execução acompanhada pela direção.',
+        ])->assertRedirect();
+        $this->actingAs($manager)->post(route('service-orders.complete', $order), [
+            'solution' => 'Reparo substituído e vazamento eliminado.',
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('service_order_materials', ['service_order_id' => $order->id, 'total_cost' => '35.90']);
+        $this->assertDatabaseHas('service_order_costs', ['service_order_id' => $order->id, 'amount' => '12.50']);
+        $this->assertDatabaseHas('service_order_work_logs', ['service_order_id' => $order->id, 'user_id' => $manager->id, 'duration_minutes' => 60]);
+        $this->assertSame('CONCLUIDA', $order->fresh()->status);
+    }
+
     public function test_notification_link_rechecks_owner_and_current_service_order_authorization(): void
     {
         [$organization, $school, $occurrence] = $this->structure();
@@ -829,21 +886,98 @@ class ServiceOrderWorkflowTest extends TestCase
         $this->actingAs($technician)->post(route('service-orders.work-logs', $order), ['started_at' => '2026-08-27 14:00:00', 'ended_at' => '2026-08-27 13:00:00', 'description' => 'Inválido'])->assertSessionHasErrors('ended_at');
     }
 
-    public function test_diagnosis_and_solution_are_required_and_completion_resolves_occurrence(): void
+    public function test_order_page_distinguishes_elapsed_request_time_from_worked_time_and_freezes_elapsed_time_on_completion(): void
+    {
+        Carbon::setTestNow('2026-09-24 12:00:00');
+
+        try {
+            [$organization, $school, $occurrence] = $this->structure();
+            $technician = $this->roleUser($organization, $school, 'tecnico');
+            $occurrence->forceFill(['created_at' => Carbon::parse('2026-09-22 08:00:00')])->saveQuietly();
+            $order = $this->order($occurrence, $technician, ['status' => 'EM_EXECUCAO']);
+            $order->workLogs()->create([
+                'user_id' => $technician->id,
+                'started_at' => Carbon::parse('2026-09-23 09:00:00'),
+                'ended_at' => Carbon::parse('2026-09-23 10:30:00'),
+                'duration_minutes' => 90,
+                'description' => 'Diagnóstico e reparo.',
+            ]);
+
+            $this->actingAs($technician)
+                ->get(route('service-orders.show', $order))
+                ->assertOk()
+                ->assertSee('Tempo decorrido da solicitação')
+                ->assertSee('2 dias e 4 horas')
+                ->assertSee('Tempo efetivamente trabalhado')
+                ->assertSee('1 hora e 30 minutos');
+
+            $order->update([
+                'status' => 'CONCLUIDA',
+                'completed_at' => Carbon::parse('2026-09-23 10:00:00'),
+            ]);
+            Carbon::setTestNow('2026-09-30 18:00:00');
+
+            $this->actingAs($technician)
+                ->get(route('service-orders.show', $order))
+                ->assertOk()
+                ->assertSee('1 dia e 2 horas')
+                ->assertSee('Da abertura da ocorrência à conclusão da OS');
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_execution_diagnosis_and_completion_are_presented_as_separate_steps(): void
     {
         [$organization, $school, $occurrence] = $this->structure();
         $manager = $this->roleUser($organization, $school, 'gestor');
         $technician = $this->roleUser($organization, $school, 'tecnico');
-        $order = $this->order($occurrence, $technician, ['status' => 'EM_EXECUCAO']);
-        $occurrence->update(['status' => 'EM_ATENDIMENTO']);
+        $order = $this->order($occurrence, $technician);
 
+        $this->actingAs($technician)
+            ->get(route('service-orders.show', $order))
+            ->assertOk()
+            ->assertSee('Iniciar execução')
+            ->assertDontSee('Registrar diagnóstico técnico')
+            ->assertDontSee('Adicionar atualização')
+            ->assertDontSee('Registrar material')
+            ->assertDontSee('Registrar tempo')
+            ->assertDontSee('Registrar custo')
+            ->assertDontSee('Anexar evidência');
+        $this->actingAs($technician)
+            ->post(route('service-orders.diagnosis', $order), ['diagnosis' => 'Registro antecipado.'])
+            ->assertSessionHasErrors('status');
+
+        $this->actingAs($technician)->post(route('service-orders.start', $order))->assertRedirect();
+
+        $this->actingAs($technician)
+            ->get(route('service-orders.show', $order))
+            ->assertOk()
+            ->assertSee('Registrar diagnóstico técnico')
+            ->assertSee('Diagnóstico do problema')
+            ->assertSee('Depois de salvar, a conclusão será liberada como próximo passo.')
+            ->assertDontSee('Concluir Ordem de Serviço');
         $this->actingAs($technician)->post(route('service-orders.complete', $order), ['solution' => 'Peça substituída.'])->assertSessionHasErrors('diagnosis');
-        $this->actingAs($technician)->post(route('service-orders.diagnosis', $order), ['diagnosis' => 'Reator com falha.'])->assertRedirect();
+        $this->actingAs($technician)->post(route('service-orders.diagnosis', $order), [
+            'diagnosis' => 'Reator com falha.',
+        ])->assertRedirect();
+
+        $this->actingAs($technician)
+            ->get(route('service-orders.show', $order))
+            ->assertOk()
+            ->assertSee('Concluir Ordem de Serviço')
+            ->assertSee('O diagnóstico já foi registrado. Informe somente a solução aplicada para finalizar.')
+            ->assertSee('Revisar diagnóstico')
+            ->assertDontSee('Diagnóstico do problema *');
         $this->actingAs($technician)->post(route('service-orders.complete', $order), ['solution' => ''])->assertSessionHasErrors('solution');
-        $this->actingAs($technician)->post(route('service-orders.complete', $order), ['solution' => 'Reator substituído e testado.'])->assertRedirect();
+        $this->actingAs($technician)->post(route('service-orders.complete', $order), [
+            'solution' => 'Reator substituído e testado.',
+        ])->assertRedirect();
 
         $this->assertSame('CONCLUIDA', $order->fresh()->status);
+        $this->assertSame('Reator com falha.', $order->fresh()->diagnosis);
         $this->assertSame('RESOLVIDA', $occurrence->fresh()->status);
+        $this->assertDatabaseHas('service_order_histories', ['service_order_id' => $order->id, 'event_type' => 'diagnosis_registered']);
         $this->assertDatabaseHas('service_order_histories', ['service_order_id' => $order->id, 'event_type' => 'completed']);
         $this->assertDatabaseHas('occurrence_histories', ['occurrence_id' => $occurrence->id, 'event_type' => 'resolved_by_service_orders']);
         foreach ([$occurrence->reporter, $manager] as $recipient) {

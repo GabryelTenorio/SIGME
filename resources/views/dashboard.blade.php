@@ -18,6 +18,41 @@
         @endforeach
     </section>
 
+    @if($onboarding)
+        <section class="card onboarding-card" aria-labelledby="manager-onboarding-title">
+            <div class="onboarding-card__header">
+                <div><span class="eyebrow">Guia rápido</span><h2 id="manager-onboarding-title">Primeiros passos da gestão</h2><p>Use esta sequência para deixar a escola pronta e acompanhar o primeiro atendimento.</p></div>
+                <div class="onboarding-card__progress"><strong>{{ $onboarding['completed'] }}/{{ $onboarding['total'] }}</strong><span>etapas concluídas</span></div>
+            </div>
+            <div class="onboarding-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ $onboarding['percentage'] }}"><span style="width: {{ $onboarding['percentage'] }}%"></span></div>
+            <ol class="onboarding-steps">
+                @foreach($onboarding['steps'] as $index => $step)
+                    <li class="{{ $step['complete'] ? 'is-complete' : '' }}">
+                        <span class="onboarding-step__number">@if($step['complete'])<x-ui.icon name="check" />@else{{ $index + 1 }}@endif</span>
+                        <span><strong>{{ $step['title'] }}</strong><small>{{ $step['description'] }}</small></span>
+                        <div class="onboarding-step__actions">
+                            <a href="{{ route('onboarding.open', $step['key']) }}">{{ $step['complete'] ? 'Revisar' : 'Abrir etapa' }}</a>
+                            @if($step['complete'])
+                                <span>Concluída</span>
+                            @endif
+                        </div>
+                    </li>
+                @endforeach
+            </ol>
+            <div class="onboarding-card__footer">
+                <span>Seu progresso é individual e não altera os dados da escola.</span>
+                <div class="onboarding-card__footer-actions">
+                    <form method="POST" action="{{ route('onboarding.reset') }}" data-confirm="Reiniciar somente o seu guia rápido? Nenhum dado da escola será apagado.">
+                        @csrf
+                        @method('DELETE')
+                        <button class="button" type="submit">Reiniciar meu guia</button>
+                    </form>
+                    <x-ui.button :href="route('reports.index')" variant="primary">Abrir relatórios</x-ui.button>
+                </div>
+            </div>
+        </section>
+    @endif
+
     <div class="dashboard-grid">
         <section class="card">
             <div class="section-title">

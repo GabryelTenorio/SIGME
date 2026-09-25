@@ -7,6 +7,7 @@ use App\Models\Permission;
 use App\Models\Role;
 use App\Models\School;
 use App\Models\User;
+use App\Support\AccessCatalog;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -32,7 +33,7 @@ class OrganizationManagementTest extends TestCase
         $this->assertSame('single_school', $organization->mode);
         $this->assertTrue($organization->allows_student_representative);
         $this->assertSame(6, Role::query()->whereBelongsTo($organization)->count());
-        $this->assertSame(43, Permission::query()->count());
+        $this->assertSame(count(AccessCatalog::permissions()), Permission::query()->count());
 
         $this->actingAs($admin)->get(route('organizations.index'))
             ->assertOk()

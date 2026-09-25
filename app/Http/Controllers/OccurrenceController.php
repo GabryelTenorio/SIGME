@@ -129,7 +129,37 @@ class OccurrenceController extends Controller
 
         return view('occurrences.show', [
             'occurrence' => $occurrence->load(['school.organization', 'environment', 'category', 'reporter', 'triageResponsible', 'duplicateOf', 'attachments', 'histories.actor', 'serviceOrders.assignedUser']),
-            'duplicateCandidates' => Occurrence::query()->where('school_id', $occurrence->school_id)->whereKeyNot($occurrence->id)->latest()->limit(100)->get(),
+        ]);
+    }
+
+    public function duplicateCandidates(Request $request, Occurrence $occurrence): View
+    {
+        $this->authorize('markDuplicate', $occurrence);
+        abort_unless(in_array($occurrence->status, ['ABERTA', 'EM_TRIAGEM', 'AGUARDANDO_INFORMACOES'], true), 404);
+        $data = $request->validate(['search' => ['nullable', 'string', 'max:100']]);
+        $search = trim((string) ($data['search'] ?? ''));
+
+        $candidates = Occurrence::query()
+            ->with(['environment', 'category'])
+            ->where('school_id', $occurrence->school_id)
+            ->whereKeyNot($occurrence->id)
+            ->when($search !== '', function (Builder $query) use ($search): void {
+                $term = '%'.$search.'%';
+                $query->where(fn (Builder $filtered) => $filtered
+                    ->where('protocol', 'like', $term)
+                    ->orWhere('title', 'like', $term)
+                    ->orWhereHas('environment', fn (Builder $environment) => $environment
+                        ->where('name', 'like', $term)
+                        ->orWhere('code', 'like', $term))
+                    ->orWhereHas('category', fn (Builder $category) => $category->where('name', 'like', $term)));
+            })
+            ->latest()
+            ->paginate(20)
+            ->withQueryString();
+
+        return view('occurrences.duplicate', [
+            'occurrence' => $occurrence->load(['school', 'environment']),
+            'candidates' => $candidates,
         ]);
     }
 }

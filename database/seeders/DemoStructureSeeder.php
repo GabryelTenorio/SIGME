@@ -119,6 +119,7 @@ class DemoStructureSeeder extends Seeder
                 'organization_id' => $organization->id,
                 'name' => $name,
                 'password' => Str::password(32),
+                'password_set_at' => now(),
                 'is_platform_admin' => false,
                 'is_active' => false,
             ],

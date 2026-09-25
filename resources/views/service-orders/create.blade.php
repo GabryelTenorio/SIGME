@@ -9,9 +9,8 @@
             <x-ui.select label="Responsável principal" name="assigned_user_id"><option value="">A definir</option>@foreach ($users as $user)<option value="{{ $user->id }}" @selected(old('assigned_user_id') == $user->id)>{{ $user->name }}</option>@endforeach</x-ui.select>
             <label class="form-field form-field--full"><span>Descrição do serviço <b>*</b></span><textarea name="description" rows="5" required>{{ old('description', $occurrence->description) }}</textarea>@error('description')<em>{{ $message }}</em>@enderror</label>
             <x-ui.input label="Prazo previsto" name="due_date" type="date" :value="old('due_date')" />
-            <x-ui.input label="Data planejada" name="planned_at" type="datetime-local" :value="old('planned_at')" />
-            <x-ui.input label="Custo estimado (R$)" name="estimated_cost" type="number" step="0.01" min="0" :value="old('estimated_cost', '0.00')" />
-            <label class="form-field"><span>Equipe adicional</span><select name="member_ids[]" multiple size="4">@foreach ($users as $user)<option value="{{ $user->id }}" @selected(in_array($user->id, old('member_ids', [])))>{{ $user->name }}</option>@endforeach</select><small>Use Ctrl para selecionar mais de uma pessoa.</small></label>
+            <x-ui.input label="Data planejada" name="planned_at" type="date" :value="old('planned_at')" />
+            <x-ui.input label="Custo estimado (R$)" name="estimated_cost" type="text" inputmode="numeric" autocomplete="off" data-currency-input :value="old('estimated_cost', '0.00')" />
             <label class="form-field form-field--full"><span>Observações</span><textarea name="notes" rows="3">{{ old('notes') }}</textarea></label>
         </div>
         <div class="section-title section-title--spaced"><div><h2>Condições financeiras</h2><p>Itens especiais sempre enviam a OS para aprovação.</p></div></div>

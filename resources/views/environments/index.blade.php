@@ -2,13 +2,15 @@
     <header class="page-header">
         <div><h1>Ambientes</h1><p>Locais válidos das escolas para o registro de ocorrências.</p></div>
         @if ($schools->contains(fn ($school) => auth()->user()->hasPermission('ambientes.criar', $school) || auth()->user()->hasPermission('ambientes.gerenciar', $school)))
-            <div class="page-header__actions"><x-ui.button :href="route('environments.create', ['school_id' => $selectedSchoolId])" variant="primary"><x-ui.icon name="plus" /> Novo ambiente</x-ui.button></div>
+            @can('create', \App\Models\Environment::class)
+                <div class="page-header__actions"><x-ui.button :href="route('environments.create', ['school_id' => $selectedSchoolId])" variant="primary"><x-ui.icon name="plus" /> Novo ambiente</x-ui.button></div>
+            @endcan
         @endif
     </header>
 
     <form method="GET" class="filter-bar">
         @if ($schools->count() > 1)
-            <select name="school_id" aria-label="Filtrar por escola" onchange="this.form.submit()">
+            <select name="school_id" aria-label="Filtrar por escola" data-auto-submit>
                 <option value="">Todas as escolas</option>
                 @foreach ($schools as $school)<option value="{{ $school->id }}" @selected($selectedSchoolId === $school->id)>{{ $school->name }}</option>@endforeach
             </select>
@@ -39,7 +41,7 @@
                         <td><div class="table-actions">
                             @can('update', $environment)<a class="icon-button" href="{{ route('environments.edit', $environment) }}" aria-label="Editar {{ $environment->name }}"><x-ui.icon name="edit" /></a>@endcan
                             @if ($environment->is_active && auth()->user()->can('deactivate', $environment))
-                                <form method="POST" action="{{ route('environments.deactivate', $environment) }}" onsubmit="return confirm('Desativar este ambiente? O histórico será preservado.')">@csrf @method('PATCH')<button class="icon-button" type="submit" aria-label="Desativar {{ $environment->name }}"><x-ui.icon name="logout" /></button></form>
+                                <form method="POST" action="{{ route('environments.deactivate', $environment) }}" data-confirm="Desativar este ambiente? O histórico será preservado.">@csrf @method('PATCH')<button class="icon-button" type="submit" aria-label="Desativar {{ $environment->name }}"><x-ui.icon name="logout" /></button></form>
                             @endif
                         </div></td>
                     </tr>

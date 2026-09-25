@@ -33,6 +33,10 @@
                     <p>Use a conta fornecida pelo administrador responsável.</p>
                 </div>
 
+                @if (session('status'))
+                    <div class="alert alert--success login-status" role="status">{{ session('status') }}</div>
+                @endif
+
                 <form method="POST" action="{{ route('login.store') }}" class="login-form">
                     @csrf
 
@@ -43,6 +47,8 @@
                         <input name="remember" type="checkbox" value="1">
                         <span>Manter acesso neste computador</span>
                     </label>
+
+                    <a class="login-forgot-password" href="{{ route('password.request') }}">Esqueci minha senha</a>
 
                     @if ($errors->any())
                         <div class="alert alert--danger" role="alert">{{ $errors->first() }}</div>

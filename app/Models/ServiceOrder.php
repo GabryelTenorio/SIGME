@@ -124,6 +124,28 @@ class ServiceOrder extends Model
             ->toScale(2);
     }
 
+    public function requestElapsedMinutes(?CarbonInterface $at = null): int
+    {
+        $this->loadMissing('occurrence');
+        $end = $this->completed_at ?? $at ?? now();
+
+        if ($this->completed_at === null && in_array($this->status, ['REJEITADA', 'CANCELADA'], true)) {
+            $terminalEvents = $this->relationLoaded('histories')
+                ? $this->histories->whereIn('event_type', ['rejected', 'cancelled'])
+                : $this->histories()->whereIn('event_type', ['rejected', 'cancelled'])->get();
+            $end = $terminalEvents->sortBy('created_at')->first()?->created_at ?? $end;
+        }
+
+        return max(0, (int) floor($this->occurrence->created_at->diffInMinutes($end, false)));
+    }
+
+    public function workedMinutes(): int
+    {
+        return (int) ($this->relationLoaded('workLogs')
+            ? $this->workLogs->sum('duration_minutes')
+            : $this->workLogs()->sum('duration_minutes'));
+    }
+
     public function hasPendingEmergencyRatification(): bool
     {
         return $this->emergency_authorized_at !== null && $this->emergency_ratified_at === null;
@@ -140,6 +162,6 @@ class ServiceOrder extends Model
 
     protected function casts(): array
     {
-        return ['due_date' => 'date', 'planned_at' => 'datetime', 'started_at' => 'datetime', 'completed_at' => 'datetime', 'emergency_authorized_at' => 'datetime', 'emergency_ratification_due_at' => 'datetime', 'emergency_ratified_at' => 'datetime', 'estimated_cost' => 'decimal:2', 'requires_purchase' => 'boolean', 'external_service' => 'boolean', 'asset_replacement' => 'boolean', 'asset_disposal' => 'boolean', 'extraordinary_purchase' => 'boolean', 'approval_required' => 'boolean'];
+        return ['due_date' => 'date', 'planned_at' => 'date', 'started_at' => 'datetime', 'completed_at' => 'datetime', 'emergency_authorized_at' => 'datetime', 'emergency_ratification_due_at' => 'datetime', 'emergency_ratified_at' => 'datetime', 'estimated_cost' => 'decimal:2', 'requires_purchase' => 'boolean', 'external_service' => 'boolean', 'asset_replacement' => 'boolean', 'asset_disposal' => 'boolean', 'extraordinary_purchase' => 'boolean', 'approval_required' => 'boolean'];
     }
 }

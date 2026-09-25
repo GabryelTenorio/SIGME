@@ -29,6 +29,7 @@ class UserFactory extends Factory
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
+            'password_set_at' => now(),
             'organization_id' => null,
             'is_platform_admin' => false,
             'is_active' => true,
@@ -43,6 +44,14 @@ class UserFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'email_verified_at' => null,
+        ]);
+    }
+
+    public function pendingFirstAccess(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'password' => Str::random(64),
+            'password_set_at' => null,
         ]);
     }
 }

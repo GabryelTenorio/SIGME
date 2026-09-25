@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -34,15 +35,19 @@ class LoginRequest extends FormRequest
         ];
     }
 
-    public function authenticate(): void
+    public function authenticate(): User
     {
         $this->ensureIsNotRateLimited();
 
-        if (! Auth::attemptWhen([
+        $credentials = [
             'email' => $this->string('email')->toString(),
             'password' => $this->string('password')->toString(),
             'is_active' => true,
-        ], fn (User $user): bool => $user->hasActiveAccess(), $this->boolean('remember'))) {
+        ];
+        $provider = Auth::guard('web')->getProvider();
+        $user = $provider->retrieveByCredentials($credentials);
+
+        if (! $user instanceof User || ! $provider->validateCredentials($user, $credentials) || ! $user->hasActiveAccess()) {
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([
@@ -50,7 +55,19 @@ class LoginRequest extends FormRequest
             ]);
         }
 
+        if ($user->requiresFirstAccess()) {
+            throw ValidationException::withMessages([
+                'email' => 'Defina sua senha pelo convite de primeiro acesso ou solicite uma recuperação.',
+            ]);
+        }
+
+        if (Hash::needsRehash($user->getAuthPassword())) {
+            $user->forceFill(['password' => $credentials['password']])->save();
+        }
+
         RateLimiter::clear($this->throttleKey());
+
+        return $user;
     }
 
     public function ensureIsNotRateLimited(): void

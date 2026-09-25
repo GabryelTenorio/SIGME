@@ -103,14 +103,20 @@ class EnvironmentManagementTest extends TestCase
             ->assertOk()->assertDontSeeText('Todas as escolas');
     }
 
-    public function test_manager_can_view_but_cannot_create_or_edit(): void
+    public function test_manager_can_create_and_edit_environment_for_own_school(): void
     {
         [$manager, $school] = $this->schoolUser('gestor');
         $environment = Environment::factory()->for($school)->create();
 
-        $this->actingAs($manager)->get(route('environments.index'))->assertOk();
-        $this->actingAs($manager)->get(route('environments.create'))->assertForbidden();
-        $this->actingAs($manager)->get(route('environments.edit', $environment))->assertForbidden();
+        $this->actingAs($manager)->get(route('environments.index'))->assertOk()->assertSeeText('Novo ambiente');
+        $this->actingAs($manager)->get(route('environments.create'))->assertOk();
+        $this->actingAs($manager)->post(route('environments.store'), $this->payload($school, [
+            'code' => 'DIRECAO',
+            'name' => 'Direção',
+            'type' => 'direction',
+        ]))->assertRedirect(route('environments.index', ['school_id' => $school->id]));
+        $this->assertDatabaseHas('environments', ['school_id' => $school->id, 'code' => 'DIRECAO']);
+        $this->actingAs($manager)->get(route('environments.edit', $environment))->assertOk();
     }
 
     public function test_school_admin_cannot_access_environment_from_another_school_or_organization(): void

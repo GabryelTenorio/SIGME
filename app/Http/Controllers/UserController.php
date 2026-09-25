@@ -14,11 +14,15 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class UserController extends Controller
 {
+    /** @var list<string> */
+    private const SCHOOL_MANAGER_ASSIGNABLE_ROLE_SLUGS = ['solicitante', 'tecnico', 'representante-aluno'];
+
     public function index(Request $request): View
     {
         $this->authorize('viewAny', User::class);
@@ -68,11 +72,13 @@ class UserController extends Controller
     {
         DB::transaction(function () use ($request): void {
             $data = Arr::except($request->validated(), ['school_ids', 'role_ids']);
+            $data['password'] = Str::random(64);
+            $data['password_set_at'] = null;
             $user = User::query()->create($data);
             $this->syncAssignments($user, $request->validated('school_ids', []), $request->validated('role_ids', []));
         });
 
-        return redirect()->route('users.index')->with('success', 'Usuário criado com seus perfis e escolas.');
+        return redirect()->route('users.index')->with('success', 'Usuário criado. O convite para definir a senha foi enviado por e-mail.');
     }
 
     public function edit(Request $request, User $user): View
@@ -90,9 +96,6 @@ class UserController extends Controller
 
         DB::transaction(function () use ($request, $user): void {
             $data = Arr::except($request->validated(), ['school_ids', 'role_ids']);
-            if (blank($data['password'] ?? null)) {
-                unset($data['password']);
-            }
             $user->update($data);
             $this->syncAssignments($user, $request->validated('school_ids', []), $request->validated('role_ids', []));
         });
@@ -104,6 +107,7 @@ class UserController extends Controller
     private function formContext(Request $request, ?User $managedUser = null): array
     {
         $actor = $request->user();
+        $schoolManager = $this->isSchoolManager($actor);
         $organizations = $actor->is_platform_admin
             ? Organization::query()->where(fn (Builder $query) => $query
                 ->where('is_active', true)
@@ -131,13 +135,19 @@ class UserController extends Controller
                 ->where('organization_id', $organizationId)
                 ->where('is_system', true)
                 ->whereIn('slug', array_keys(AccessCatalog::roles()))
-                ->when(! $actor->is_platform_admin && ! $actor->hasPermission('usuarios.gerenciar'),
-                    fn (Builder $query) => $query->where('scope', 'school'))
+                ->when($schoolManager,
+                    fn (Builder $query) => $query->whereIn('slug', self::SCHOOL_MANAGER_ASSIGNABLE_ROLE_SLUGS))
                 ->orderBy('name')
                 ->get(),
             'selectedSchoolIds' => $managedUser?->schools()->pluck('schools.id')->all() ?? [],
             'selectedRoleIds' => $managedUser?->roles()->pluck('roles.id')->unique()->all() ?? [],
         ];
+    }
+
+    private function isSchoolManager(User $user): bool
+    {
+        return $user->roles()->where('slug', 'gestor')->exists()
+            && ! $user->roles()->whereIn('slug', ['administrador-rede', 'administrador-escola'])->exists();
     }
 
     /** @param list<int|string> $schoolIds @param list<int|string> $roleIds */

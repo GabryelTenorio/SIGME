@@ -3,7 +3,7 @@
     <form method="POST" enctype="multipart/form-data" action="{{ route('occurrences.store') }}" class="form-card">@csrf
         <div class="form-grid">
             @if ($schools->count() > 1)
-                <x-ui.select label="Escola" name="school_id" required onchange="window.location='{{ route('occurrences.create') }}?school_id='+this.value">@foreach ($schools as $school)<option value="{{ $school->id }}" @selected(old('school_id', $selectedSchoolId) == $school->id)>{{ $school->name }}</option>@endforeach</x-ui.select>
+                <x-ui.select label="Escola" name="school_id" required data-location-base="{{ route('occurrences.create') }}" data-location-param="school_id">@foreach ($schools as $school)<option value="{{ $school->id }}" @selected(old('school_id', $selectedSchoolId) == $school->id)>{{ $school->name }}</option>@endforeach</x-ui.select>
             @else <div class="form-field readonly-field"><span>Escola</span><strong>{{ $schools->first()->name }}</strong></div><input type="hidden" name="school_id" value="{{ $selectedSchoolId }}"> @endif
             <x-ui.select label="Ambiente" name="environment_id" required><option value="">Selecione</option>@foreach ($environments as $environment)<option value="{{ $environment->id }}" @selected(old('environment_id') == $environment->id)>{{ $environment->code }} · {{ $environment->name }}</option>@endforeach</x-ui.select>
             <x-ui.select label="Categoria" name="occurrence_category_id" required><option value="">Selecione</option>@foreach ($categories as $category)<option value="{{ $category->id }}" @selected(old('occurrence_category_id') == $category->id)>{{ $category->name }}</option>@endforeach</x-ui.select>

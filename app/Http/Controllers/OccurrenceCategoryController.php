@@ -61,7 +61,7 @@ class OccurrenceCategoryController extends Controller
             'organizations' => $organizations,
             'selectedOrganizationId' => $selectedOrganizationId,
             'organization' => $organization,
-            'schools' => $organization->schools()->where('is_active', true)->orderBy('name')->get(),
+            'schools' => $this->creatableSchools($request, $organization),
         ]);
     }
 
@@ -141,16 +141,24 @@ class OccurrenceCategoryController extends Controller
 
     private function canCreateIn(Request $request, Organization $organization): bool
     {
+        return $this->creatableSchools($request, $organization)->isNotEmpty();
+    }
+
+    private function creatableSchools(Request $request, Organization $organization): Collection
+    {
         $user = $request->user();
-        if ($user->is_platform_admin) {
-            return true;
-        }
-        if ($user->organization_id !== $organization->id) {
-            return false;
+        if (! $user->is_platform_admin && $user->organization_id !== $organization->id) {
+            return collect();
         }
 
-        return $organization->mode === 'network'
-            ? $user->hasPermission('categorias.criar')
-            : $organization->schools->contains(fn (School $school) => $user->canAccessSchool($school) && $user->hasPermission('categorias.criar', $school));
+        $schools = $organization->schools()->where('is_active', true)->orderBy('name')->get();
+        if ($user->is_platform_admin || $user->hasPermission('categorias.criar')) {
+            return $schools;
+        }
+
+        return $schools->filter(
+            fn (School $school) => $user->canAccessSchool($school)
+                && $user->hasPermission('categorias.criar', $school),
+        )->values();
     }
 }

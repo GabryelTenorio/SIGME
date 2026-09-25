@@ -6,6 +6,7 @@ use App\Models\Environment;
 use App\Models\Occurrence;
 use App\Models\OccurrenceCategory;
 use App\Models\School;
+use App\Rules\SafePrivateAttachment;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -36,7 +37,7 @@ class OccurrenceRequest extends FormRequest
             'impact' => ['required', Rule::in(array_keys(Occurrence::IMPACTS))],
             'perceived_urgency' => ['required', Rule::in(array_keys(Occurrence::URGENCIES))],
             'attachments' => ['nullable', 'array', 'max:5'],
-            'attachments.*' => ['file', 'max:10240', 'mimes:jpg,jpeg,png,pdf'],
+            'attachments.*' => ['file', 'max:10240', 'mimes:jpg,jpeg,png,pdf', new SafePrivateAttachment],
         ];
     }
 

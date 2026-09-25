@@ -1,10 +1,17 @@
 <?php
 
+use App\Http\Controllers\AccountSecurityController;
+use App\Http\Controllers\Auth\FirstAccessController;
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\Auth\NewPasswordController;
+use App\Http\Controllers\Auth\PasswordResetLinkController;
+use App\Http\Controllers\Auth\TwoFactorChallengeController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EnvironmentController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\InternalNotificationController;
+use App\Http\Controllers\ManagementReportController;
+use App\Http\Controllers\ManagerOnboardingController;
 use App\Http\Controllers\OccurrenceCategoryController;
 use App\Http\Controllers\OccurrenceController;
 use App\Http\Controllers\OccurrenceResolutionController;
@@ -25,10 +32,33 @@ Route::get('/', fn () => redirect()->route(auth()->check() ? 'dashboard' : 'logi
 Route::middleware('guest')->group(function () {
     Route::get('/entrar', [LoginController::class, 'create'])->name('login');
     Route::post('/entrar', [LoginController::class, 'store'])->name('login.store');
+    Route::get('/verificacao-em-duas-etapas', [TwoFactorChallengeController::class, 'create'])->name('two-factor.challenge');
+    Route::post('/verificacao-em-duas-etapas', [TwoFactorChallengeController::class, 'store'])->name('two-factor.verify');
+    Route::post('/verificacao-em-duas-etapas/cancelar', [TwoFactorChallengeController::class, 'destroy'])->name('two-factor.cancel');
+    Route::get('/esqueci-a-senha', [PasswordResetLinkController::class, 'create'])->name('password.request');
+    Route::post('/esqueci-a-senha', [PasswordResetLinkController::class, 'store'])
+        ->middleware('throttle:3,1')
+        ->name('password.email');
+    Route::get('/redefinir-senha/{token}', [NewPasswordController::class, 'create'])->name('password.reset');
+    Route::post('/redefinir-senha', [NewPasswordController::class, 'store'])->name('password.update');
+    Route::get('/primeiro-acesso/{token}', [FirstAccessController::class, 'create'])->name('first-access.show');
+    Route::post('/primeiro-acesso', [FirstAccessController::class, 'store'])
+        ->middleware('throttle:5,1')
+        ->name('first-access.update');
 });
 
 Route::middleware('auth')->group(function () {
     Route::get('/painel', DashboardController::class)->name('dashboard');
+    Route::get('/guia-rapido/{step}/abrir', [ManagerOnboardingController::class, 'open'])->name('onboarding.open');
+    Route::delete('/guia-rapido', [ManagerOnboardingController::class, 'reset'])->name('onboarding.reset');
+    Route::get('/relatorios', [ManagementReportController::class, 'index'])->name('reports.index');
+    Route::get('/relatorios/ocorrencias.csv', [ManagementReportController::class, 'exportOccurrences'])->name('reports.occurrences.export');
+    Route::get('/relatorios/ordens-servico.csv', [ManagementReportController::class, 'exportServiceOrders'])->name('reports.service-orders.export');
+    Route::get('/minha-conta/seguranca', [AccountSecurityController::class, 'show'])->name('account.security.show');
+    Route::post('/minha-conta/seguranca/2fa', [AccountSecurityController::class, 'enable'])->name('account.security.two-factor.enable');
+    Route::post('/minha-conta/seguranca/2fa/confirmar', [AccountSecurityController::class, 'confirm'])->name('account.security.two-factor.confirm');
+    Route::post('/minha-conta/seguranca/2fa/codigos-recuperacao', [AccountSecurityController::class, 'regenerateRecoveryCodes'])->name('account.security.two-factor.recovery-codes');
+    Route::delete('/minha-conta/seguranca/2fa', [AccountSecurityController::class, 'disable'])->name('account.security.two-factor.disable');
     Route::get('/notificacoes', [InternalNotificationController::class, 'index'])->name('notifications.index');
     Route::patch('/notificacoes/preferencias', [InternalNotificationController::class, 'updatePreferences'])->name('notifications.preferences.update');
     Route::get('/notificacoes/{notification}/abrir', [InternalNotificationController::class, 'open'])->name('notifications.open');
@@ -63,6 +93,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/ocorrencias/{occurrence}/solicitar-informacao', [OccurrenceTriageController::class, 'requestInformation'])->name('occurrences.information.request');
     Route::post('/ocorrencias/{occurrence}/fornecer-informacao', [OccurrenceTriageController::class, 'provideInformation'])->name('occurrences.information.provide');
     Route::post('/ocorrencias/{occurrence}/nao-procede', [OccurrenceTriageController::class, 'notApplicable'])->name('occurrences.not-applicable');
+    Route::get('/ocorrencias/{occurrence}/duplicada', [OccurrenceController::class, 'duplicateCandidates'])->name('occurrences.duplicate.select');
     Route::post('/ocorrencias/{occurrence}/duplicada', [OccurrenceTriageController::class, 'duplicate'])->name('occurrences.duplicate');
     Route::post('/ocorrencias/{occurrence}/encaminhar', [OccurrenceTriageController::class, 'forward'])->name('occurrences.forward');
     Route::post('/ocorrencias/{o}/encerrar', [OccurrenceResolutionController::class, 'close'])->name('occurrences.close');

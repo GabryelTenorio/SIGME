@@ -1,7 +1,7 @@
 @php($editing = isset($category))
 <div class="form-grid">
     @if (! $editing && auth()->user()->is_platform_admin && $organizations->count() > 1)
-        <x-ui.select label="Organização" name="organization_id" required onchange="window.location='{{ route('categories.create') }}?organization_id='+this.value">@foreach ($organizations as $item)<option value="{{ $item->id }}" @selected($selectedOrganizationId === $item->id)>{{ $item->name }}</option>@endforeach</x-ui.select>
+        <x-ui.select label="Organização" name="organization_id" required data-location-base="{{ route('categories.create') }}" data-location-param="organization_id">@foreach ($organizations as $item)<option value="{{ $item->id }}" @selected($selectedOrganizationId === $item->id)>{{ $item->name }}</option>@endforeach</x-ui.select>
     @else
         <div class="form-field readonly-field"><span>Organização</span><strong>{{ $editing ? $category->organization->name : $organization->name }}</strong></div>
         <input type="hidden" name="organization_id" value="{{ $selectedOrganizationId }}">

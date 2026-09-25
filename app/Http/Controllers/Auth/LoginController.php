@@ -18,8 +18,20 @@ class LoginController extends Controller
 
     public function store(LoginRequest $request): RedirectResponse
     {
-        $request->authenticate();
+        $user = $request->authenticate();
         $request->session()->regenerate();
+
+        if ($user->hasEnabledTwoFactorAuthentication()) {
+            $request->session()->put('auth.two_factor_pending', [
+                'user_id' => $user->getKey(),
+                'remember' => $request->boolean('remember'),
+                'expires_at' => now()->addMinutes((int) config('security.two_factor.challenge_lifetime_minutes', 10))->timestamp,
+            ]);
+
+            return redirect()->route('two-factor.challenge');
+        }
+
+        Auth::guard('web')->login($user, $request->boolean('remember'));
 
         return redirect()->intended(route('dashboard'));
     }
@@ -30,6 +42,13 @@ class LoginController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect()->route('home');
+        return redirect()
+            ->route('login')
+            ->withHeaders([
+                'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0, private',
+                'Clear-Site-Data' => '"cache", "cookies", "storage"',
+                'Expires' => '0',
+                'Pragma' => 'no-cache',
+            ]);
     }
 }

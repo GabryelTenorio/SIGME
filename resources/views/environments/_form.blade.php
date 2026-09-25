@@ -2,7 +2,7 @@
 
 <div class="form-grid">
     @if (! $editing && $schools->count() > 1)
-        <x-ui.select label="Escola" name="school_id" required onchange="window.location='{{ route('environments.create') }}?school_id='+this.value">
+        <x-ui.select label="Escola" name="school_id" required data-location-base="{{ route('environments.create') }}" data-location-param="school_id">
             @foreach ($schools as $school)<option value="{{ $school->id }}" @selected(old('school_id', $selectedSchoolId) == $school->id)>{{ $school->name }}</option>@endforeach
         </x-ui.select>
     @else

@@ -102,8 +102,8 @@ Status: baseline funcional aprovado; implementação ainda possui gaps identific
 | --- | --- | --- | --- | --- | --- |
 | OS-T01 | criação sem aprovação necessária | criar OS | `APROVADA` | `ordens_servico.criar` | ocorrência encaminhada, escopo, responsável/equipe elegível e dados da OS |
 | OS-T02 | criação com aprovação necessária | criar OS | `AGUARDANDO_APROVACAO` | `ordens_servico.criar` | mesmos dados e motivo objetivo da aprovação |
-| OS-T03 | `AGUARDANDO_APROVACAO` | aprovar | `APROVADA` | `ordens_servico.aprovar`; ator diferente do criador | decisão auditada |
-| OS-T04 | `AGUARDANDO_APROVACAO` | rejeitar | `REJEITADA` | `ordens_servico.rejeitar`; ator diferente do criador | motivo obrigatório |
+| OS-T03 | `AGUARDANDO_APROVACAO` | aprovar | `APROVADA` | `ordens_servico.aprovar`; gestor da escola pode decidir a própria OS | decisão auditada |
+| OS-T04 | `AGUARDANDO_APROVACAO` | rejeitar | `REJEITADA` | `ordens_servico.rejeitar`; gestor da escola pode decidir a própria OS | motivo obrigatório |
 | OS-T05 | `APROVADA` | iniciar | `EM_EXECUCAO` | executor elegível e atribuído | data/hora de início |
 | OS-T05E | `AGUARDANDO_APROVACAO` urgente | autorizar início emergencial | `EM_EXECUCAO` | outro gestor/administrador autorizado e executor elegível | motivo, autorizador, notificação e ratificação posterior |
 | OS-T06 | `EM_EXECUCAO` | aguardar material | `AGUARDANDO_MATERIAL` | executor elegível e atribuído | motivo obrigatório |
@@ -151,9 +151,9 @@ Valores monetários usam escala de duas casas sem conversão para `float`. Quant
 
 ## 7. Aprovação e segregação
 
-- Quando a OS exigir aprovação, o criador não pode aprovar nem rejeitar sua própria OS.
-- A regra vale mesmo que o criador acumule o perfil de aprovador.
-- Permissão de plataforma ou administração não deve contornar silenciosamente essa regra de negócio.
+- Quando a OS exigir aprovação, um criador com perfil `gestor` no escopo da escola pode aprovar ou rejeitar sua própria OS.
+- Criadores sem o perfil `gestor` na escola continuam impedidos de decidir a própria OS, mesmo que possuam acesso administrativo ou de plataforma.
+- A exceção não se aplica à autorização nem à ratificação emergencial, que continuam exigindo outro ator elegível.
 - A decisão deve registrar aprovador, data, resultado e motivo quando houver rejeição.
 - Limite de custo, serviço externo, substituição, descarte e compra extraordinária continuam como gatilhos existentes até revisão específica.
 
@@ -206,7 +206,7 @@ E-mails devem conter somente protocolo, tipo do evento, status e link autenticad
 
 1. Transições estão distribuídas entre controllers.
 2. Resolvido no banco principal em 03/09/2026: atribuição exige usuário ativo, organização, escola, `visualizar` e `executar` OS.
-3. Resolvido no banco principal em 03/09/2026: criador não pode aprovar nem rejeitar a própria OS, inclusive com perfis acumulados ou administração de plataforma.
+3. Regra revisada em 24/09/2026: o gestor da escola pode aprovar ou rejeitar a própria OS; criadores sem esse perfil continuam bloqueados, inclusive com administração de plataforma.
 4. Resolvido no banco principal em 03/09/2026: início emergencial exige autorizador diferente do criador, executor elegível, motivo e ratificação posterior; a notificação ainda depende do módulo próprio.
 5. Armazenamento, leitura, eventos operacionais, links com reautorização, preferência individual desativada por padrão, e-mail mínimo opcional e alertas recorrentes de ratificação vencida foram implementados e testados em `sigme_testing`.
 6. Resolvido no banco principal em 03/09/2026: `PLANEJADA` foi removido do fluxo ativo e a coluna `status` não possui valor padrão.

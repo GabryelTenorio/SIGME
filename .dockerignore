@@ -4,6 +4,7 @@
 !config/**
 !database/migrations/**
 !database/seeders/DatabaseSeeder.php
+!lang/**
 !public/**
 !resources/**
 !routes/**

@@ -6,7 +6,7 @@
 
 <div class="form-grid">
     @if (auth()->user()->is_platform_admin && ! $editing)
-        <x-ui.select label="Organização" name="organization_id" required onchange="window.location='{{ route('users.create') }}?organization_id='+this.value">
+        <x-ui.select label="Organização" name="organization_id" required data-location-base="{{ route('users.create') }}" data-location-param="organization_id">
             @foreach ($organizations as $organization)<option value="{{ $organization->id }}" @selected($selectedOrganizationId == $organization->id)>{{ $organization->name }}</option>@endforeach
         </x-ui.select>
     @else
@@ -18,14 +18,16 @@
 
     <x-ui.input label="Nome completo" name="name" :value="$managedUser?->name ?? ''" required />
     <x-ui.input label="E-mail" name="email" type="email" :value="$managedUser?->email ?? ''" required autocomplete="off" />
-    <x-ui.input
-        label="Senha"
-        name="password"
-        type="password"
-        :required="! $editing"
-        autocomplete="new-password"
-        :hint="$editing ? 'Deixe vazio para manter a senha atual.' : 'Mínimo de 12 caracteres.'"
-    />
+
+    @if (! $editing)
+        <div class="alert alert--warning form-field--full">
+            O usuário receberá um e-mail para criar a própria senha. O convite continuará válido até a senha ser definida.
+        </div>
+    @elseif ($managedUser->requiresFirstAccess())
+        <div class="alert alert--warning form-field--full">
+            Esta conta ainda aguarda a definição da primeira senha. Se o e-mail for alterado, um novo convite será enviado.
+        </div>
+    @endif
 
     <div class="form-field form-field--full">
         <span>Perfis <b aria-hidden="true">*</b></span>
@@ -64,6 +66,6 @@
 </div>
 
 <div class="form-actions">
-    <x-ui.button variant="primary" type="submit">{{ $editing ? 'Salvar alterações' : 'Criar usuário' }}</x-ui.button>
+    <x-ui.button variant="primary" type="submit">{{ $editing ? 'Salvar alterações' : 'Criar usuário e enviar convite' }}</x-ui.button>
     <x-ui.button :href="route('users.index')">Cancelar</x-ui.button>
 </div>

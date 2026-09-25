@@ -7,8 +7,8 @@ x-app: &app
         dockerfile: docker/windows/Dockerfile
     environment:
         APP_NAME: SIGME
-        APP_ENV: local
-        APP_DEBUG: 'false'
+        APP_ENV: '${APP_ENV:-local}'
+        APP_DEBUG: '${APP_DEBUG:-false}'
         APP_KEY: '${APP_KEY:?Execute Instalar SIGME Docker.cmd}'
         APP_URL: 'http://localhost:${APP_PORT:-8080}'
         APP_LOCALE: pt_BR
@@ -20,16 +20,26 @@ x-app: &app
         DB_USERNAME: sigme
         DB_PASSWORD: '${DB_PASSWORD:?Execute Instalar SIGME Docker.cmd}'
         SESSION_DRIVER: database
+        SESSION_LIFETIME: '${SESSION_LIFETIME:-120}'
         SESSION_ENCRYPT: 'true'
         SESSION_COOKIE: '${SIGME_WINDOWS_PROJECT:-sigme-windows}-session'
+        SESSION_SECURE_COOKIE: '${SESSION_SECURE_COOKIE:-false}'
+        SESSION_HTTP_ONLY: 'true'
+        SESSION_SAME_SITE: lax
         CACHE_STORE: database
         FILESYSTEM_DISK: private-local
         QUEUE_CONNECTION: database
-        MAIL_MAILER: smtp
-        MAIL_HOST: mailpit
-        MAIL_PORT: 1025
-        MAIL_FROM_ADDRESS: sigme@example.test
-        MAIL_FROM_NAME: SIGME
+        MAIL_MAILER: '${MAIL_MAILER:-smtp}'
+        MAIL_SCHEME: '${MAIL_SCHEME:-null}'
+        MAIL_HOST: '${MAIL_HOST:-mailpit}'
+        MAIL_PORT: '${MAIL_PORT:-1025}'
+        MAIL_USERNAME: '${MAIL_USERNAME:-null}'
+        MAIL_PASSWORD: '${MAIL_PASSWORD:-null}'
+        MAIL_EHLO_DOMAIN: '${MAIL_EHLO_DOMAIN:-localhost}'
+        MAIL_FROM_ADDRESS: '${MAIL_FROM_ADDRESS:-sigme@example.test}'
+        MAIL_FROM_NAME: '${MAIL_FROM_NAME:-SIGME}'
+        TWO_FACTOR_ENFORCE_PRIVILEGED: '${TWO_FACTOR_ENFORCE_PRIVILEGED:-true}'
+        TWO_FACTOR_REQUIRED_ROLES: '${TWO_FACTOR_REQUIRED_ROLES:-administrador-rede,administrador-escola,gestor}'
         LOG_CHANNEL: stack
     volumes:
         - uploads:/var/www/html/storage/app/private

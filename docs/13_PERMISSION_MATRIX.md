@@ -108,12 +108,12 @@ Capacidades específicas continuam obrigatórias:
 
 Quando `approval_required = true`:
 
-1. o criador não pode aprovar nem rejeitar a própria OS;
+1. o criador com perfil `gestor` na escola pode aprovar ou rejeitar a própria OS; outros criadores permanecem impedidos;
 2. o aprovador deve possuir `ordens_servico.aprovar` ou `ordens_servico.rejeitar` na mesma escola;
 3. o aprovador deve estar ativo;
 4. a decisão deve ser auditada;
 5. a ausência de outro aprovador mantém a OS em `AGUARDANDO_APROVACAO`;
-6. acumular perfis não remove a separação entre criador e aprovador;
+6. acesso administrativo ou de plataforma, sem o perfil `gestor` na escola, não remove a separação entre criador e aprovador;
 7. início emergencial exige autorização de outro gestor/administrador, diferente do criador, e ratificação posterior.
 
 ## 7. Autorização emergencial
@@ -206,7 +206,7 @@ Quando `approval_required = true`:
 - técnico inativo não pode ser atribuído;
 - técnico elegível da escola pode ser atribuído;
 - ID de usuário manipulado no request é rejeitado;
-- criador não pode aprovar nem rejeitar sua própria OS;
+- gestor da escola pode aprovar e rejeitar a própria OS; criadores sem esse perfil continuam impedidos;
 - outro aprovador autorizado da escola pode decidir;
 - aprovador de outra escola não pode decidir;
 - acumular perfil de criador e aprovador não contorna segregação;

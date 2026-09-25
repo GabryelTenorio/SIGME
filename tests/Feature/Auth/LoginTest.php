@@ -32,6 +32,8 @@ class LoginTest extends TestCase
         $this->get(route('dashboard'))
             ->assertOk()
             ->assertSeeText($user->name)
+            ->assertSeeText($user->email)
+            ->assertSeeText('Conta ativa')
             ->assertSeeText('Organizações e acesso');
     }
 
@@ -59,10 +61,68 @@ class LoginTest extends TestCase
     {
         $user = User::factory()->create();
 
-        $this->actingAs($user)
-            ->post(route('logout'))
-            ->assertRedirect(route('home'));
+        $response = $this->actingAs($user)
+            ->withSession([
+                'auth.two_factor_pending' => ['user_id' => $user->id],
+                'temporary_account_data' => 'must-be-removed',
+            ])
+            ->post(route('logout'));
+
+        $response
+            ->assertRedirect(route('login'))
+            ->assertHeader('Clear-Site-Data', '"cache", "cookies", "storage"')
+            ->assertHeader('Pragma', 'no-cache')
+            ->assertHeader('Expires', '0');
+
+        $this->assertStringContainsString('no-store', (string) $response->headers->get('Cache-Control'));
 
         $this->assertGuest();
+        $this->assertFalse(session()->has('auth.two_factor_pending'));
+        $this->assertFalse(session()->has('temporary_account_data'));
+    }
+
+    public function test_private_pages_are_not_cached_by_the_browser(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->get(route('dashboard'));
+
+        $response->assertOk();
+        $this->assertStringContainsString('no-store', (string) $response->headers->get('Cache-Control'));
+        $response->assertHeader('Pragma', 'no-cache');
+        $response->assertHeader('Expires', '0');
+        $response->assertSee('data-logout-form', false);
+        $response->assertSee('data-logout-redirect="'.route('login').'"', false);
+    }
+
+    public function test_next_login_uses_only_the_new_account_after_logout(): void
+    {
+        $firstUser = User::factory()->create([
+            'name' => 'Conta anterior',
+            'password' => 'senha-anterior-123',
+        ]);
+        $nextUser = User::factory()->create([
+            'name' => 'Conta atual',
+            'password' => 'senha-atual-123',
+        ]);
+
+        $this->post(route('login.store'), [
+            'email' => $firstUser->email,
+            'password' => 'senha-anterior-123',
+        ])->assertRedirect(route('dashboard'));
+
+        $this->post(route('logout'))->assertRedirect(route('login'));
+        $this->assertGuest();
+
+        $this->post(route('login.store'), [
+            'email' => $nextUser->email,
+            'password' => 'senha-atual-123',
+        ])->assertRedirect(route('dashboard'));
+
+        $this->assertAuthenticatedAs($nextUser);
+        $this->get(route('dashboard'))
+            ->assertOk()
+            ->assertSeeText('Conta atual')
+            ->assertDontSeeText('Conta anterior');
     }
 }

@@ -59,8 +59,10 @@ Verificação em 10/09/2026: imagem construída do zero, 32 migrations aplicadas
 - fluxo de ocorrência, triagem, OS interna ou externa, aprovação comum ou emergencial, execução e reabertura;
 - anexos privados em imagem ou PDF;
 - notificações internas e preferência individual de envio por e-mail;
-- 137 testes automatizados, com 1.021 asserções, aprovados em 10/09/2026;
-- build de produção e revisão responsiva validados em 10/09/2026.
+- recuperação de senha por link temporário e autenticação em dois fatores TOTP com códigos de recuperação;
+- exigência configurável de 2FA para administradores e direção/gestor;
+- 179 testes automatizados, com 1.410 asserções, aprovados em 25/09/2026;
+- build de produção, Compose de implantação e revisão responsiva validados em 17/09/2026.
 
 ## Desenvolvimento com Sail/WSL — compatibilidade e requisitos
 
@@ -154,7 +156,7 @@ docker compose exec laravel.test php artisan sigme:create-admin \
   --generate
 ```
 
-O comando mostra uma senha segura uma única vez. Guarde-a em um gerenciador de senhas e entre em http://localhost:8080.
+O SIGME envia ao endereço informado um convite de primeiro acesso. A própria pessoa define uma senha com pelo menos 12 caracteres; o convite permanece válido até essa definição e funciona uma única vez. Em ambiente local, abra o Mailpit em http://localhost:8025 para acessar a mensagem. Em servidor, configure o SMTP real antes de criar a conta.
 
 ## Restaurar o banco incluído neste repositório
 
@@ -195,6 +197,38 @@ Ou use o Ubuntu:
 
 Nunca use `docker compose down -v` no uso normal: a opção `-v` remove o volume do MySQL.
 
+## Backup criptografado e recuperação — Sail/WSL
+
+O backup operacional preserva, no mesmo artefato cifrado, o dump consistente do MySQL, os anexos privados, o `.env` e um manifesto SHA-256. A chave fica separada em `~/.config/sigme/backup.key`; sem ela o backup não pode ser restaurado. Guarde uma cópia dessa chave em local seguro e diferente do servidor.
+
+Crie e verifique um backup manual:
+
+```bash
+cd ~/projetos/sigme
+./scripts/wsl/backup.sh --label manual
+./scripts/wsl/verify-backup.sh ~/sigme-data/backups/NOME-DO-BACKUP.backup.enc
+```
+
+Antes de confiar em um backup, ensaie a restauração. O comando abaixo cria um banco temporário, importa e verifica todas as tabelas, confere os uploads e apaga somente a cópia descartável:
+
+```bash
+./scripts/wsl/restore-test.sh ~/sigme-data/backups/NOME-DO-BACKUP.backup.enc
+```
+
+A restauração principal é propositalmente interativa, cria outro backup antes de substituir qualquer dado e exige confirmação textual exata:
+
+```bash
+./scripts/wsl/restore-backup.sh ~/sigme-data/backups/NOME-DO-BACKUP.backup.enc
+```
+
+No Windows, registre o backup diário das 20h para a instalação Sail/WSL:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\register-backup-task.ps1 -At 20:00
+```
+
+O Agendador executa quando o computador está ligado e tenta recuperar uma execução perdida. Backups locais não substituem uma cópia externa: antes de colocar o SIGME em um servidor, defina retenção e cópia cifrada para outro equipamento ou armazenamento.
+
 ## Atualizar uma instalação existente
 
 Antes de atualizar, preserve seus dados e confirme que não há alterações locais que você queira manter. No Ubuntu:
@@ -225,6 +259,52 @@ Para consultar migrations:
 
 ```bash
 docker compose exec -T laravel.test php artisan migrate:status
+```
+
+## Envio de e-mail
+
+No ambiente local, o Mailpit apenas captura as mensagens em `http://localhost:8025`; ele não entrega mensagens na caixa postal real. Em produção, o SIGME usa `MAIL_FROM_ADDRESS` e `MAIL_FROM_NAME` como remetente e envia cada mensagem para o e-mail cadastrado no usuário.
+
+As notificações operacionais por e-mail começam desativadas. Cada usuário pode ativá-las em **Notificações > Preferências de entrega**. As notificações internas continuam ativas, e mensagens essenciais de segurança — como redefinição de senha — são enviadas mesmo com a preferência operacional desativada.
+
+Para usar Gmail como remetente, configure no `.env.production` sem versionar a senha:
+
+```dotenv
+MAIL_MAILER=smtp
+MAIL_SCHEME=smtp
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=conta-remetente@gmail.com
+MAIL_PASSWORD=senha-de-app-do-google
+MAIL_EHLO_DOMAIN=seudominio.com.br
+MAIL_FROM_ADDRESS=conta-remetente@gmail.com
+MAIL_FROM_NAME=SIGME
+```
+
+Use uma **senha de app** criada na conta Google com verificação em duas etapas; não use a senha normal da conta. Em outros provedores, substitua host, porta, usuário e credencial pelos dados fornecidos pelo serviço e mantenha `MAIL_FROM_ADDRESS` como um remetente autorizado.
+
+## Preparação para domínio e servidor
+
+O repositório inclui `compose.production.yaml` e `.env.production.example`. Eles deixam o aplicativo vinculado apenas a `127.0.0.1`, não publicam o MySQL, usam cookies seguros, mantêm fila e agendador separados, exigem 2FA para perfis privilegiados e recebem as credenciais de SMTP por variáveis de ambiente. O Mailpit não faz parte do Compose de produção.
+
+Quando o domínio e o servidor existirem:
+
+1. copie `.env.production.example` para `.env.production` e gere chaves e senhas novas;
+2. preencha `APP_URL` com o endereço HTTPS definitivo e configure as variáveis `MAIL_*` fornecidas pelo serviço de e-mail;
+3. coloque Nginx, Caddy ou outro proxy HTTPS na frente de `127.0.0.1:8080`;
+4. construa a imagem, inicie MySQL, aplique migrations e só então inicie aplicação, fila e agendador;
+5. teste envio SMTP, restauração do backup, renovação TLS e monitoramento antes de cadastrar dados reais.
+
+Exemplo de validação e subida, já no servidor:
+
+```bash
+cp .env.production.example .env.production
+# edite .env.production sem versionar o arquivo
+docker compose --env-file .env.production -f compose.production.yaml config --quiet
+docker compose --env-file .env.production -f compose.production.yaml build app
+docker compose --env-file .env.production -f compose.production.yaml up -d mysql
+docker compose --env-file .env.production -f compose.production.yaml run --rm app php artisan migrate --force
+docker compose --env-file .env.production -f compose.production.yaml up -d --wait
 ```
 
 ## Dados persistentes e segredos
@@ -261,7 +341,7 @@ O snapshot versionado contém dados locais de demonstração e hashes de senha. 
 
 ## Limite desta publicação
 
-Esta entrega é adequada para desenvolvimento e homologação local. Antes de produção ainda devem ser definidos infraestrutura, domínio, HTTPS, e-mail real, monitoramento, política de backup criptografado, retenção, recuperação de desastre e gestão de segredos.
+Esta entrega está preparada para desenvolvimento, homologação local e futura implantação com Docker. A compra e configuração da infraestrutura, domínio, proxy HTTPS, credenciais SMTP reais, monitoramento, retenção externa dos backups e gestão de segredos continuam sendo atividades obrigatórias antes de receber dados reais.
 
 ## Solução rápida de problemas
 

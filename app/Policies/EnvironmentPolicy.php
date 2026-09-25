@@ -35,7 +35,10 @@ class EnvironmentPolicy
      */
     public function create(User $user): bool
     {
-        return $this->viewAny($user);
+        return $user->accessibleSchools()->contains(
+            fn ($school) => $user->hasPermission('ambientes.criar', $school)
+                || $user->hasPermission('ambientes.gerenciar', $school),
+        );
     }
 
     /**

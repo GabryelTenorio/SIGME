@@ -117,8 +117,8 @@ class ServiceOrderEntryController extends Controller
 
     private function requireOperational(ServiceOrder $o): void
     {
-        if (! in_array($o->status, ['APROVADA', 'EM_EXECUCAO', 'AGUARDANDO_MATERIAL', 'PAUSADA'], true)) {
-            throw ValidationException::withMessages(['status' => 'A OS não aceita registros neste estado.']);
+        if (! in_array($o->status, ['EM_EXECUCAO', 'AGUARDANDO_MATERIAL', 'PAUSADA'], true)) {
+            throw ValidationException::withMessages(['status' => 'Inicie a execução antes de registrar atividades na OS.']);
         }
     }
 }

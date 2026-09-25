@@ -31,7 +31,7 @@ class ServiceOrderRequest extends FormRequest
             'assigned_user_id' => ['nullable', 'integer', Rule::exists(User::class, 'id')],
             'member_ids' => ['array'], 'member_ids.*' => ['integer', 'distinct', Rule::exists(User::class, 'id')],
             'title' => ['required', 'string', 'max:255'], 'description' => ['required', 'string', 'max:5000'],
-            'due_date' => ['nullable', 'date'], 'planned_at' => ['nullable', 'date'], 'estimated_cost' => ['nullable', 'decimal:0,2', 'min:0', 'max:9999999999.99'],
+            'due_date' => ['nullable', 'date'], 'planned_at' => ['nullable', 'date_format:Y-m-d'], 'estimated_cost' => ['nullable', 'decimal:0,2', 'min:0', 'max:9999999999.99'],
             'requires_purchase' => ['boolean'], 'external_service' => ['boolean'], 'asset_replacement' => ['boolean'], 'asset_disposal' => ['boolean'], 'extraordinary_purchase' => ['boolean'],
             'external_provider_name' => [Rule::excludeIf(fn (): bool => ! $this->boolean('external_service')), Rule::requiredIf(fn (): bool => $this->boolean('external_service')), 'nullable', 'string', 'max:255'],
             'external_service_description' => [Rule::excludeIf(fn (): bool => ! $this->boolean('external_service')), Rule::requiredIf(fn (): bool => $this->boolean('external_service')), 'nullable', 'string', 'max:5000'],

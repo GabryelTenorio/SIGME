@@ -353,6 +353,27 @@ class OccurrenceWorkflowTest extends TestCase
         $this->actingAs($manager)->get(route('occurrences.show', $outside))->assertForbidden();
     }
 
+    public function test_duplicate_selection_searches_only_occurrences_from_the_same_school(): void
+    {
+        [$organization, $school, $environment, $category] = $this->structure();
+        $manager = $this->roleUser($organization, $school, 'gestor');
+        $reporter = $this->roleUser($organization, $school, 'solicitante');
+        $duplicate = $this->occurrence($organization, $school, $environment, $category, $reporter, ['title' => 'Vazamento informado novamente']);
+        $principal = $this->occurrence($organization, $school, $environment, $category, $reporter, ['title' => 'Vazamento principal do banheiro']);
+        $unrelated = $this->occurrence($organization, $school, $environment, $category, $reporter, ['title' => 'Lâmpada queimada']);
+        [, $otherSchool, $otherEnvironment, $otherCategory] = $this->structure($organization);
+        $outside = $this->occurrence($organization, $otherSchool, $otherEnvironment, $otherCategory, $reporter, ['title' => 'Vazamento em outra escola']);
+
+        $this->actingAs($manager)
+            ->get(route('occurrences.duplicate.select', [$duplicate, 'search' => 'Vazamento principal']))
+            ->assertOk()
+            ->assertSeeText('Selecionar ocorrência principal')
+            ->assertSeeText($principal->protocol)
+            ->assertDontSeeText($unrelated->protocol)
+            ->assertDontSeeText($outside->protocol)
+            ->assertSee('name="duplicate_of_id" value="'.$principal->id.'"', false);
+    }
+
     public function test_requester_cannot_confirm_priority_but_manager_can_and_history_is_created(): void
     {
         [$organization, $school, $environment, $category] = $this->structure();
@@ -463,7 +484,13 @@ class OccurrenceWorkflowTest extends TestCase
         $occurrence = $this->occurrence($organization, $school, $environment, $category, $requester, ['status' => 'EM_TRIAGEM']);
         $this->actingAs($manager)->post(route('occurrences.forward', $occurrence), $this->versioned($occurrence, ['forwarded_destination' => 'Manutenção']))->assertSessionHasErrors('confirmed_priority');
         $occurrence->update(['confirmed_priority' => 'HIGH']);
-        $this->actingAs($manager)->post(route('occurrences.forward', $occurrence), $this->versioned($occurrence, ['forwarded_destination' => 'Manutenção']))->assertRedirect();
+        $this->actingAs($manager)
+            ->get(route('occurrences.show', $occurrence))
+            ->assertOk()
+            ->assertSeeText('Concluir triagem e criar Ordem de Serviço');
+        $this->actingAs($manager)
+            ->post(route('occurrences.forward', $occurrence), $this->versioned($occurrence, ['forwarded_destination' => 'Manutenção da escola']))
+            ->assertRedirect(route('service-orders.create', ['occurrence_id' => $occurrence->id]));
         $this->assertSame('ENCAMINHADA', $occurrence->fresh()->status);
         $this->assertDatabaseHas('occurrence_histories', ['occurrence_id' => $occurrence->id, 'event_type' => 'forwarded']);
         $forwardHistory = OccurrenceHistory::query()->where('event_type', 'forwarded')->sole();

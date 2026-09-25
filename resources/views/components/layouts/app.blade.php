@@ -20,6 +20,9 @@
     );
     $showOccurrences = $currentUser->can('viewAny', \App\Models\Occurrence::class);
     $showServiceOrders = $currentUser->can('viewAny', \App\Models\ServiceOrder::class);
+    $showReports = $currentUser->is_platform_admin || $currentUser->accessibleSchools()->contains(
+        fn ($school) => $currentUser->hasPermission('indicadores.visualizar', $school)
+    );
     $notificationsAvailable = \Illuminate\Support\Facades\Schema::hasTable('internal_notifications');
     $unreadNotificationCount = $notificationsAvailable
         ? $currentUser->internalNotifications()->whereNull('read_at')->count()
@@ -83,18 +86,34 @@
                     @endif
                     @if ($showOccurrences)<a class="sidebar-nav__item @if ($active === 'occurrences') is-active @endif" href="{{ route('occurrences.index') }}"><x-ui.icon name="occurrence" /><span>Ocorrências</span></a>@endif
                     @if ($showServiceOrders)<a class="sidebar-nav__item @if ($active === 'service-orders') is-active @endif" href="{{ route('service-orders.index') }}"><x-ui.icon name="service-order" /><span>Ordens de Serviço</span></a>@endif
+                    @if ($showReports)<a class="sidebar-nav__item @if ($active === 'reports') is-active @endif" href="{{ route('reports.index') }}"><x-ui.icon name="chart" /><span>Relatórios</span></a>@endif
                     @if ($notificationsAvailable)
                         <a class="sidebar-nav__item @if ($active === 'notifications') is-active @endif" href="{{ route('notifications.index') }}">
                             <x-ui.icon name="notification" /><span>Notificações</span>
                             @if ($unreadNotificationCount > 0)<span class="sidebar-nav__count">{{ min($unreadNotificationCount, 99) }}{{ $unreadNotificationCount > 99 ? '+' : '' }}</span>@endif
                         </a>
                     @endif
+
+                    <span class="sidebar-nav__label">Minha conta</span>
+                    <a class="sidebar-nav__item @if ($active === 'security') is-active @endif" href="{{ route('account.security.show') }}">
+                        <x-ui.icon name="shield" /><span>Segurança</span>
+                    </a>
                 </nav>
 
                 <div class="sidebar-user">
                     <span class="avatar">{{ str($initials)->upper() }}</span>
-                    <span class="sidebar-user__text"><strong>{{ $currentUser->name }}</strong><small>{{ $roleName }}</small></span>
-                    <form method="POST" action="{{ route('logout') }}">
+                    <span class="sidebar-user__text">
+                        <span class="sidebar-user__label">Conta ativa</span>
+                        <strong>{{ $currentUser->name }}</strong>
+                        <small title="{{ $currentUser->email }}">{{ $currentUser->email }}</small>
+                        <span class="sidebar-user__role">{{ $roleName }}</span>
+                    </span>
+                    <form
+                        method="POST"
+                        action="{{ route('logout') }}"
+                        data-logout-form
+                        data-logout-redirect="{{ route('login') }}"
+                    >
                         @csrf
                         <button class="sidebar-logout" type="submit" aria-label="Sair"><x-ui.icon name="logout" /></button>
                     </form>
@@ -102,12 +121,20 @@
             </aside>
 
             <div class="app-content">
-                <header class="mobile-header">
+                <header class="app-header">
                     <button type="button" class="mobile-menu-button" data-sidebar-open aria-controls="app-sidebar" aria-expanded="false">
                         <x-ui.icon name="menu" /><span class="sr-only">Abrir menu</span>
                     </button>
-                    <strong>SIGME</strong>
-                    <span class="avatar avatar--small">{{ str($initials)->upper() }}</span>
+                    <strong class="app-header__brand">SIGME</strong>
+                    <div class="account-indicator" aria-label="Conta ativa: {{ $currentUser->name }}, {{ $currentUser->email }}, perfil {{ $roleName }}">
+                        <span class="avatar avatar--small">{{ str($initials)->upper() }}</span>
+                        <span class="account-indicator__identity">
+                            <span>Conta ativa</span>
+                            <strong>{{ $currentUser->name }}</strong>
+                            <small>{{ $currentUser->email }}</small>
+                        </span>
+                        <span class="account-indicator__role">{{ $roleName }}</span>
+                    </div>
                 </header>
 
                 <main class="main-area" id="main-content" tabindex="-1">

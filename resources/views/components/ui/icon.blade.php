@@ -26,6 +26,9 @@
         @case('notification')
             <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" />
             @break
+        @case('shield')
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" /><path d="m9 12 2 2 4-4" />
+            @break
         @case('logout')
             <path d="M10 17l5-5-5-5M15 12H3M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
             @break
@@ -43,6 +46,9 @@
             @break
         @case('search')
             <circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" />
+            @break
+        @case('chart')
+            <path d="M4 20V10M10 20V4M16 20v-7M22 20V7" />
             @break
         @default
             <circle cx="12" cy="12" r="9" />

@@ -76,11 +76,11 @@ class OccurrenceCategoryRequest extends FormRequest
             }
 
             if (! $this->user()->is_platform_admin) {
+                $permission = $category ? 'categorias.editar' : 'categorias.criar';
                 $allowed = $this->user()->organization_id === $organization->id
-                    && ($organization->mode === 'network'
-                        ? $this->user()->hasPermission($category ? 'categorias.editar' : 'categorias.criar')
-                        : $organization->schools->contains(fn ($school) => $this->user()->canAccessSchool($school)
-                            && $this->user()->hasPermission($category ? 'categorias.editar' : 'categorias.criar', $school)));
+                    && ($this->user()->hasPermission($permission)
+                        || $organization->schools->contains(fn ($school) => $this->user()->canAccessSchool($school)
+                            && $this->user()->hasPermission($permission, $school)));
                 if (! $allowed) {
                     $validator->errors()->add('organization_id', 'Você não pode gerenciar categorias desta organização.');
                 }
@@ -94,6 +94,20 @@ class OccurrenceCategoryRequest extends FormRequest
                 ->where('organization_id', '!=', $organization->id)->exists();
             if ($invalidSchool) {
                 $validator->errors()->add('school_ids', 'Todas as escolas devem pertencer à organização da categoria.');
+            }
+
+            if (! $category && ! $this->user()->is_platform_admin && ! $this->user()->hasPermission('categorias.criar')) {
+                $allowedSchoolIds = $organization->schools()
+                    ->where('is_active', true)
+                    ->get()
+                    ->filter(fn ($school) => $this->user()->canAccessSchool($school)
+                        && $this->user()->hasPermission('categorias.criar', $school))
+                    ->pluck('id');
+                $selectedSchoolIds = collect($this->input('school_ids', []))->map(fn ($id) => (int) $id);
+
+                if ($selectedSchoolIds->diff($allowedSchoolIds)->isNotEmpty()) {
+                    $validator->errors()->add('school_ids', 'Você só pode disponibilizar a categoria nas escolas sob sua gestão.');
+                }
             }
         }];
     }

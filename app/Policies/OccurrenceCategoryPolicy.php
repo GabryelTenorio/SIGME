@@ -37,7 +37,10 @@ class OccurrenceCategoryPolicy
      */
     public function create(User $user): bool
     {
-        return $this->viewAny($user);
+        return $user->hasPermission('categorias.criar')
+            || $user->accessibleSchools()->contains(
+                fn ($school) => $user->hasPermission('categorias.criar', $school),
+            );
     }
 
     /**

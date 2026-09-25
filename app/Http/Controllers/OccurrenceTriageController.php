@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Occurrence;
 use App\Models\OccurrenceHistory;
+use App\Models\ServiceOrder;
 use App\Support\InternalNotificationService;
 use Closure;
 use Illuminate\Http\RedirectResponse;
@@ -109,7 +110,7 @@ class OccurrenceTriageController extends Controller
             $this->transition($current, $request, 'DUPLICADA', 'marked_duplicate', ['duplicate_of_id' => $data['duplicate_of_id']], ['reason' => $data['reason'] ?? null]);
         });
 
-        return back()->with('success', 'Ocorrência marcada como duplicada.');
+        return redirect()->route('occurrences.show', $occurrence)->with('success', 'Ocorrência marcada como duplicada.');
     }
 
     public function forward(Request $request, Occurrence $occurrence): RedirectResponse
@@ -134,7 +135,12 @@ class OccurrenceTriageController extends Controller
             );
         });
 
-        return back()->with('success', 'Ocorrência encaminhada para manutenção.');
+        if ($request->user()->can('create', ServiceOrder::class)) {
+            return redirect()->route('service-orders.create', ['occurrence_id' => $occurrence->id])
+                ->with('success', 'Triagem concluída. Agora crie a Ordem de Serviço.');
+        }
+
+        return redirect()->route('occurrences.show', $occurrence)->with('success', 'Ocorrência encaminhada para manutenção.');
     }
 
     /** @param Closure(Occurrence): void $mutation */

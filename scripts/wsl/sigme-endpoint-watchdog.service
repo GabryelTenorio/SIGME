@@ -1,0 +1,14 @@
+[Unit]
+Description=SIGME public endpoint watchdog
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/home/e-not-094/projetos/sigme/scripts/wsl/keep-production-online.sh
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target
