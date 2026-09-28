@@ -1,3 +1,0 @@
-@echo off
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\windows\docker.ps1" -Action Admin
-pause

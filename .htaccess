@@ -1,0 +1,5 @@
+Require local
+
+<FilesMatch "^(banco\.sql|config\.php|funcoes\.php)$">
+    Require all denied
+</FilesMatch>

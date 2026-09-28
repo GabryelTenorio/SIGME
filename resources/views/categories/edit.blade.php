@@ -1,1 +1,0 @@
-<x-layouts.app title="Editar categoria" active="categories"><header class="page-header"><div><h1>Editar categoria</h1><p>{{ $category->name }} · {{ $category->identifier }}</p></div></header><form method="POST" action="{{ route('categories.update', $category) }}" class="form-card">@csrf @method('PUT') @include('categories._form')</form></x-layouts.app>
